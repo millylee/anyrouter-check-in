@@ -7,7 +7,7 @@ on:
 jobs:
   checkin:
     runs-on: windows-latest
-    environment: production
+    environment: prod
     steps:
     - name: 检出代码
       uses: actions/checkout@v4
@@ -63,7 +63,7 @@ jobs:
     - name: 执行签到
       env:
         PYTHONIOENCODING: utf-8
-        ANYROUTER_ACCOUNTS: ${{ secrets.ANYROUTER_ACCOUNTS }}
+        ANYROUTER_ACCOUNTS: ${{ secrets.ANYROUTER_ACCT }}
         DINGDING_WEBHOOK: ${{ secrets.DINGDING_WEBHOOK }}
         EMAIL_USER: ${{ secrets.EMAIL_USER }}
         EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
