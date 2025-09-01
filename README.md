@@ -4,7 +4,7 @@
 
 **维护开源不易，如果本项目帮助到了你，请帮忙点个 Star，谢谢!**
 
-用于 Claude Code 中转站 Any Router 多账号每日签到，一次 $25，限时注册即送 100 美金，[点击这里注册](https://anyrouter.top/register?aff=gSsN)。
+用于 Claude Code 中转站 Any Router 多账号每日签到，一次 $25，限时注册即送 100 美金，[点击这里注册](https://anyrouter.top/register?aff=EbTh)。
 
 ## 功能特性
 
