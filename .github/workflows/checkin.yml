@@ -1,7 +1,8 @@
 name: AnyRouter 自动签到
 on:
   schedule:
-    - cron: '38,52 0 * * *'
+    - cron: '10 0 * * *'
+    - cron: '30 0 * * *'
   workflow_dispatch:
 
 jobs:
