@@ -72,6 +72,7 @@ jobs:
     - name: 执行签到
       env:
         ANYROUTER_ACCOUNTS: ${{ secrets.ANYROUTER_ACCOUNTS }}
+        # 旧格式环境变量（向后兼容）
         DINGDING_WEBHOOK: ${{ secrets.DINGDING_WEBHOOK }}
         EMAIL_USER: ${{ secrets.EMAIL_USER }}
         EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
@@ -81,6 +82,13 @@ jobs:
         SERVERPUSHKEY: ${{ secrets.SERVERPUSHKEY }}
         FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
         WEIXIN_WEBHOOK: ${{ secrets.WEIXIN_WEBHOOK }}
+        # 新格式环境变量（支持自定义模板）
+        DINGTALK_NOTIF_CONFIG: ${{ secrets.DINGTALK_NOTIF_CONFIG }}
+        EMAIL_NOTIF_CONFIG: ${{ secrets.EMAIL_NOTIF_CONFIG }}
+        PUSHPLUS_NOTIF_CONFIG: ${{ secrets.PUSHPLUS_NOTIF_CONFIG }}
+        SERVERPUSH_NOTIF_CONFIG: ${{ secrets.SERVERPUSH_NOTIF_CONFIG }}
+        FEISHU_NOTIF_CONFIG: ${{ secrets.FEISHU_NOTIF_CONFIG }}
+        WECOM_NOTIF_CONFIG: ${{ secrets.WECOM_NOTIF_CONFIG }}
       run: |
         uv run checkin.py
 
