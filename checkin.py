@@ -18,7 +18,8 @@ from playwright.async_api import async_playwright
 from notify import notify
 from models import NotificationData, AccountResult, NotificationStats
 
-load_dotenv()
+# 禁用变量插值以保留模板中的 $ 符号
+load_dotenv(interpolate=False)
 
 BALANCE_HASH_FILE = 'balance_hash.txt'
 
