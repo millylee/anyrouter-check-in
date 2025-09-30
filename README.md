@@ -201,12 +201,17 @@ FEISHU_NOTIF_CONFIG="https://open.feishu.cn/open-apis/bot/v2/hook/xxx"
 
 #### 企业微信机器人
 ```bash
-# 方式一：JSON 配置（支持 markdown 模式和自定义模板）
-WECOM_NOTIF_CONFIG='{"webhook":"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx","platform_settings":{"use_markdown":true},"template":"自定义模板"}'
+# 方式一：JSON 配置（支持 markdown 样式和自定义模板）
+WECOM_NOTIF_CONFIG='{"webhook":"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx","platform_settings":{"markdown_style":"markdown"},"template":"自定义模板"}'
 
 # 方式二：纯 Webhook URL（使用默认模板）
 WECOM_NOTIF_CONFIG="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
 ```
+
+**`markdown_style` 配置说明**：
+- `"markdown"`：使用 markdown 格式（默认值）
+- `"markdown_v2"`：使用 markdown_v2 格式
+- `null` 或其他值：使用纯文本格式
 
 #### PushPlus 推送
 ```bash

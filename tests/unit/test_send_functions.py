@@ -143,13 +143,15 @@ class TestNotificationSending:
 			assert data['msg_type'] == 'text'
 			assert 'text' in data
 
-	@pytest.mark.parametrize('use_markdown', [
-		True,
-		False,
+	@pytest.mark.parametrize('markdown_style,expected_msgtype', [
+		('markdown', 'markdown'),
+		('markdown_v2', 'markdown_v2'),
+		(None, 'text'),
+		('invalid', 'text'),
 	])
 	@patch('httpx.Client')
-	def test_wecom_markdown_modes(self, mock_client, monkeypatch, use_markdown):
-		"""测试企业微信的 markdown 模式和普通文本模式"""
+	def test_wecom_markdown_style_modes(self, mock_client, monkeypatch, markdown_style, expected_msgtype):
+		"""测试企业微信的 markdown_style 配置"""
 		# 清空环境
 		for key in list(os.environ.keys()):
 			if 'WECOM' in key or 'WEIXIN' in key or 'NOTIF_CONFIG' in key:
@@ -159,7 +161,7 @@ class TestNotificationSending:
 		config = {
 			'webhook': 'https://example.com/webhook',
 			'platform_settings': {
-				'use_markdown': use_markdown
+				'markdown_style': markdown_style
 			},
 			'template': None
 		}
@@ -178,12 +180,10 @@ class TestNotificationSending:
 		call_args = mock_client_instance.post.call_args
 		data = call_args[1]['json']
 
-		if use_markdown:
-			# 验证是 markdown 模式
-			assert data['msgtype'] == 'markdown'
+		# 验证消息格式
+		assert data['msgtype'] == expected_msgtype
+		if 'markdown' in expected_msgtype:
 			assert 'markdown' in data
 			assert '**测试标题**' in data['markdown']['content']
 		else:
-			# 验证是文本模式
-			assert data['msgtype'] == 'text'
 			assert 'text' in data

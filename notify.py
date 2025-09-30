@@ -104,12 +104,14 @@ class NotificationKit:
 		if not self.wecom_config:
 			raise ValueError('未配置企业微信 Webhook')
 
-		# 检查是否使用 markdown 模式（确保 platform_settings 不为 None）
+		# 检查 markdown_style 配置（确保 platform_settings 不为 None）
 		platform_settings = self.wecom_config.platform_settings or {}
-		use_markdown = platform_settings.get('use_markdown', True)
+		markdown_style = platform_settings.get('markdown_style', 'markdown')
 
-		if use_markdown:
-			data = {'msgtype': 'markdown', 'markdown': {'content': f'**{title}**\n{content}'}}
+		# 根据 markdown_style 选择消息格式
+		# 如果 markdown_style 包含 'markdown'，则直接作为消息类型；否则使用 text 模式
+		if markdown_style and 'markdown' in str(markdown_style):
+			data = {'msgtype': markdown_style, markdown_style: {'content': f'**{title}**\n{content}'}}
 		else:
 			data = {'msgtype': 'text', 'text': {'content': f'{title}\n{content}'}}
 
