@@ -11,6 +11,7 @@
 - ✅ 单个/多账号自动签到
 - ✅ 多种机器人通知（可选）
 - ✅ 绕过 WAF 限制
+- ✅ 支持 Stencil 模板自定义通知内容
 
 ## 使用方法
 
@@ -140,28 +141,165 @@
 
 脚本支持多种通知方式，可以通过配置以下环境变量开启，如果 `webhook` 有要求安全设置，例如钉钉，可以在新建机器人时选择自定义关键词，填写 `AnyRouter`。
 
-### 邮箱通知
+### 传统配置方式（向后兼容）
+
+> 本配置方式有可能将在未来的某个版本中被彻底移除，请尽快升级至[新版本的配置方式](#新的配置方式(推荐))。
+
+#### 邮箱通知
 - `EMAIL_USER`: 发件人邮箱地址
 - `EMAIL_PASS`: 发件人邮箱密码/授权码
 - `CUSTOM_SMTP_SERVER`: 自定义发件人SMTP服务器(可选)
 - `EMAIL_TO`: 收件人邮箱地址
 
-### 钉钉机器人
+#### 钉钉机器人
 - `DINGDING_WEBHOOK`: 钉钉机器人的 Webhook 地址
 
-### 飞书机器人
+#### 飞书机器人
 - `FEISHU_WEBHOOK`: 飞书机器人的 Webhook 地址
 
-### 企业微信机器人
+#### 企业微信机器人
 - `WEIXIN_WEBHOOK`: 企业微信机器人的 Webhook 地址
 
-### PushPlus 推送
+#### PushPlus 推送
 - `PUSHPLUS_TOKEN`: PushPlus 的 Token
 
-### Server酱
+#### Server酱
 - `SERVERPUSHKEY`: Server酱的 SendKey
 
-配置步骤：
+### 新的配置方式（推荐）
+
+**支持 Stencil 模板自定义通知内容**
+
+新的配置方式支持：
+- 自定义通知模板（使用 Stencil 模板语法）
+- 平台特定设置（如飞书的卡片模式、颜色主题等）
+- 向后兼容旧的配置方式
+
+#### 邮箱通知
+```bash
+# JSON 配置（支持自定义模板）
+EMAIL_NOTIF_CONFIG='{"user":"your_email@example.com","pass":"your_password","to":"recipient@example.com","template":"自定义模板内容"}'
+```
+
+#### 钉钉机器人
+```bash
+# 方式一：JSON 配置
+DINGTALK_NOTIF_CONFIG='{"webhook":"https://oapi.dingtalk.com/robot/send?access_token=xxx","template":"自定义模板"}'
+
+# 方式二：纯 Webhook URL
+DINGTALK_NOTIF_CONFIG="https://oapi.dingtalk.com/robot/send?access_token=xxx"
+```
+
+#### 飞书机器人
+```bash
+# 方式一：JSON 配置（支持卡片模式和颜色主题）
+FEISHU_NOTIF_CONFIG='{"webhook":"https://open.feishu.cn/open-apis/bot/v2/hook/xxx","platform_settings":{"use_card":true,"color_theme":"blue"},"template":"自定义模板"}'
+
+# 方式二：纯 Webhook URL（使用默认模板）
+FEISHU_NOTIF_CONFIG="https://open.feishu.cn/open-apis/bot/v2/hook/xxx"
+```
+
+#### 企业微信机器人
+```bash
+# 方式一：JSON 配置（支持自定义模板）
+WECOM_NOTIF_CONFIG='{"webhook":"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx","template":"自定义模板"}'
+
+# 方式二：纯 Webhook URL（使用默认模板）
+WECOM_NOTIF_CONFIG="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
+```
+
+#### PushPlus 推送
+```bash
+# 方式一：JSON 配置（支持自定义模板）
+PUSHPLUS_NOTIF_CONFIG='{"token":"your_pushplus_token","template":"自定义模板"}'
+
+# 方式二：纯 Token（使用默认模板）
+PUSHPLUS_NOTIF_CONFIG="your_pushplus_token"
+```
+
+#### Server酱
+```bash
+# 方式一：JSON 配置（支持自定义模板）
+SERVERPUSH_NOTIF_CONFIG='{"send_key":"your_server_pushkey","template":"自定义模板"}'
+
+# 方式二：纯 SendKey（使用默认模板）
+SERVERPUSH_NOTIF_CONFIG="your_server_pushkey"
+```
+
+### 模板语法说明
+
+使用 Stencil 模板语法，支持以下变量：
+
+#### 可用变量
+
+**基础变量**：
+- `timestamp`: 执行时间戳字符串（格式：`YYYY-MM-DD HH:MM:SS`）
+
+**统计数据**：
+- `stats`: 统计数据对象，包含以下属性：
+  - `stats.success_count`: 成功签到的账号数量
+  - `stats.failed_count`: 失败的账号数量
+  - `stats.total_count`: 总账号数量
+
+**账号列表**：
+- `accounts`: 完整的账号列表数组（包含所有账号），每个账号对象包含以下属性：
+  - `name`: 账号名称
+  - `status`: 状态（ `"success"` 或 `"failed"`）
+  - `quota`: 当前余额（仅成功时有值，类型为 float）
+  - `used`: 已使用余额（仅成功时有值，类型为 float）
+  - `error`: 错误信息（仅失败时有值，类型为 string）
+
+**便利变量**：
+- `success_accounts`: 成功的账号列表（已按状态过滤）
+- `failed_accounts`: 失败的账号列表（已按状态过滤）
+- `has_success`: 布尔值，是否有成功的账号
+- `has_failed`: 布尔值，是否有失败的账号
+- `all_success`: 布尔值，是否所有账号都成功
+- `all_failed`: 布尔值，是否所有账号都失败
+- `partial_success`: 布尔值，是否部分成功部分失败
+
+#### 重要说明
+
+**Stencil 模板引擎限制**：
+- ❌ 不支持比较操作符（`==`、`!=`、`<`、`>` 等）
+- ❌ 不支持在循环中使用 `{% if account.status == "success" %}` 来判断状态
+
+#### 模板示例
+
+**推荐写法**（使用分组列表）：
+```
+{% if timestamp %}[TIME] 执行时间: {{ timestamp }}\n\n{% endif %}{% if success_accounts %}[SUCCESS] 成功账号:
+{% for account in success_accounts %}• {{ account.name }}
+💰 余额: ${{ account.quota }}, 已用: ${{ account.used }}
+{% endfor %}
+{% endif %}{% if failed_accounts %}[FAIL] 失败账号:
+{% for account in failed_accounts %}• {{ account.name }}
+⚠️ {{ account.error }}
+{% endfor %}
+{% endif %}[STATS] 签到统计:
+✅ 成功: {{ stats.success_count }}/{{ stats.total_count }}
+❌ 失败: {{ stats.failed_count }}/{{ stats.total_count }}
+```
+
+**简单模板示例**：
+```
+{{ timestamp }} - 成功: {{ success_count }}个，失败: {{ failed_count }}个
+```
+
+**条件渲染示例**：
+```
+{% if has_success %}有成功的账号{% endif %}
+{% if has_failed %}有失败的账号{% endif %}
+```
+
+### 配置优先级
+
+配置按以下优先级加载：
+1. 新环境变量配置（如 `EMAIL_NOTIF_CONFIG`）
+2. 默认模板配置文件（`notif_config/*.json`）
+3. 旧环境变量配置（如 `EMAIL_USER`、`EMAIL_PASS` 等）
+
+## 配置步骤：
 1. 在仓库的 Settings -> Environments -> production -> Environment secrets 中添加上述环境变量
 2. 每个通知方式都是独立的，可以只配置你需要的推送方式
 3. 如果某个通知方式配置不正确或未配置，脚本会自动跳过该通知方式
@@ -193,15 +331,31 @@ uv run checkin.py
 
 ## 测试
 
+项目包含完整的测试套件，分为单元测试和集成测试：
+
 ```bash
+# 安装所有依赖
 uv sync --dev
 
 # 安装 Playwright 浏览器
 playwright install chromium
 
-# 运行测试
+# 运行所有测试
 uv run pytest tests/
+
+# 仅运行单元测试（快速）
+uv run pytest tests/unit/
+
+# 仅运行集成测试（需要真实接口）
+uv run pytest tests/integration/
+
+# 运行特定测试文件
+uv run pytest tests/unit/test_template_rendering.py -v
 ```
+
+**测试目录说明**：
+- `tests/unit/` - 单元测试：配置解析、数据模型、发送功能、模板渲染
+- `tests/integration/` - 集成测试：真实通知接口测试
 
 ## 免责声明
 
