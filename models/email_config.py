@@ -15,6 +15,9 @@ class EmailConfig:
     # 收件人邮箱地址
     to: str
 
+    # 自定义 SMTP 服务器地址（可选），如果不指定则自动从邮箱地址推断
+    smtp_server: Optional[str] = None
+
     # 平台设置
     platform_settings: Optional[Dict[str, Any]] = None
 

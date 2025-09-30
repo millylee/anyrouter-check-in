@@ -45,7 +45,7 @@ class NotificationKit:
 		body = MIMEText(content, msg_type, 'utf-8')
 		msg.attach(body)
 
-		smtp_server = f'smtp.{self.email_config.user.split("@")[1]}'
+		smtp_server = self.email_config.smtp_server if self.email_config.smtp_server else f'smtp.{self.email_config.user.split("@")[1]}'
 		with smtplib.SMTP_SSL(smtp_server, 465) as server:
 			server.login(self.email_config.user, self.email_config.password)
 			server.send_message(msg)
@@ -173,6 +173,7 @@ class NotificationKit:
 					user=parsed['user'],
 					password=parsed['pass'],
 					to=parsed['to'],
+					smtp_server=parsed.get('smtp_server'),
 					platform_settings=parsed.get('platform_settings'),
 					template=template
 				)
@@ -181,6 +182,7 @@ class NotificationKit:
 		email_user = os.getenv('EMAIL_USER')
 		email_pass = os.getenv('EMAIL_PASS')
 		email_to = os.getenv('EMAIL_TO')
+		custom_smtp = os.getenv('CUSTOM_SMTP_SERVER')
 
 		if email_user and email_pass and email_to:
 			# 加载默认模板
@@ -189,6 +191,7 @@ class NotificationKit:
 				user=email_user,
 				password=email_pass,
 				to=email_to,
+				smtp_server=custom_smtp,
 				platform_settings=default_config.get('platform_settings') if default_config else None,
 				template=default_config.get('template') if default_config else None
 			)

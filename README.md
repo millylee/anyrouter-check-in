@@ -143,6 +143,7 @@
 ### 邮箱通知
 - `EMAIL_USER`: 发件人邮箱地址
 - `EMAIL_PASS`: 发件人邮箱密码/授权码
+- `CUSTOM_SMTP_SERVER`: 自定义发件人SMTP服务器(可选)
 - `EMAIL_TO`: 收件人邮箱地址
 
 ### 钉钉机器人

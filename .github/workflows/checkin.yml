@@ -76,6 +76,7 @@ jobs:
         EMAIL_USER: ${{ secrets.EMAIL_USER }}
         EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
         EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        CUSTOM_SMTP_SERVER: ${{ secrets.CUSTOM_SMTP_SERVER }}
         PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
         SERVERPUSHKEY: ${{ secrets.SERVERPUSHKEY }}
         FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
