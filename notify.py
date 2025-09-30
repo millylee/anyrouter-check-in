@@ -104,7 +104,15 @@ class NotificationKit:
 		if not self.wecom_config:
 			raise ValueError('未配置企业微信 Webhook')
 
-		data = {'msgtype': 'text', 'text': {'content': f'{title}\n{content}'}}
+		# 检查是否使用 markdown 模式（确保 platform_settings 不为 None）
+		platform_settings = self.wecom_config.platform_settings or {}
+		use_markdown = platform_settings.get('use_markdown', True)
+
+		if use_markdown:
+			data = {'msgtype': 'markdown', 'markdown': {'content': f'**{title}**\n{content}'}}
+		else:
+			data = {'msgtype': 'text', 'text': {'content': f'{title}\n{content}'}}
+
 		with httpx.Client(timeout=30.0) as client:
 			client.post(self.wecom_config.webhook, json=data)
 

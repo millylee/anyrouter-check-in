@@ -192,7 +192,7 @@ DINGTALK_NOTIF_CONFIG="https://oapi.dingtalk.com/robot/send?access_token=xxx"
 
 #### 飞书机器人
 ```bash
-# 方式一：JSON 配置（支持卡片模式和颜色主题）
+# 方式一：JSON 配置（支持卡片模式和颜色主题，以及自定义模板）
 FEISHU_NOTIF_CONFIG='{"webhook":"https://open.feishu.cn/open-apis/bot/v2/hook/xxx","platform_settings":{"use_card":true,"color_theme":"blue"},"template":"自定义模板"}'
 
 # 方式二：纯 Webhook URL（使用默认模板）
@@ -201,8 +201,8 @@ FEISHU_NOTIF_CONFIG="https://open.feishu.cn/open-apis/bot/v2/hook/xxx"
 
 #### 企业微信机器人
 ```bash
-# 方式一：JSON 配置（支持自定义模板）
-WECOM_NOTIF_CONFIG='{"webhook":"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx","template":"自定义模板"}'
+# 方式一：JSON 配置（支持 markdown 模式和自定义模板）
+WECOM_NOTIF_CONFIG='{"webhook":"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx","platform_settings":{"use_markdown":true},"template":"自定义模板"}'
 
 # 方式二：纯 Webhook URL（使用默认模板）
 WECOM_NOTIF_CONFIG="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"

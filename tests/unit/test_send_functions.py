@@ -142,3 +142,48 @@ class TestNotificationSending:
 			# 验证是文本模式
 			assert data['msg_type'] == 'text'
 			assert 'text' in data
+
+	@pytest.mark.parametrize('use_markdown', [
+		True,
+		False,
+	])
+	@patch('httpx.Client')
+	def test_wecom_markdown_modes(self, mock_client, monkeypatch, use_markdown):
+		"""测试企业微信的 markdown 模式和普通文本模式"""
+		# 清空环境
+		for key in list(os.environ.keys()):
+			if 'WECOM' in key or 'WEIXIN' in key or 'NOTIF_CONFIG' in key:
+				monkeypatch.delenv(key, raising=False)
+
+		# 构造配置
+		config = {
+			'webhook': 'https://example.com/webhook',
+			'platform_settings': {
+				'use_markdown': use_markdown
+			},
+			'template': None
+		}
+
+		monkeypatch.setenv('WECOM_NOTIF_CONFIG', json.dumps(config))
+
+		mock_client_instance = MagicMock()
+		mock_client.return_value.__enter__.return_value = mock_client_instance
+
+		from notify import NotificationKit
+		kit = NotificationKit()
+		kit.send_wecom('测试标题', '测试内容')
+
+		# 验证调用了 post 方法
+		assert mock_client_instance.post.called
+		call_args = mock_client_instance.post.call_args
+		data = call_args[1]['json']
+
+		if use_markdown:
+			# 验证是 markdown 模式
+			assert data['msgtype'] == 'markdown'
+			assert 'markdown' in data
+			assert '**测试标题**' in data['markdown']['content']
+		else:
+			# 验证是文本模式
+			assert data['msgtype'] == 'text'
+			assert 'text' in data
