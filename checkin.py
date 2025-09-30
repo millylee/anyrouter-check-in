@@ -9,12 +9,14 @@ import json
 import os
 import sys
 from datetime import datetime
+from typing import List
 
 import httpx
 from dotenv import load_dotenv
 from playwright.async_api import async_playwright
 
 from notify import notify
+from models import NotificationData, AccountResult, NotificationStats
 
 load_dotenv()
 
@@ -300,7 +302,7 @@ async def main():
 	# 为每个账号执行签到
 	success_count = 0
 	total_count = len(accounts)
-	notification_content = []
+	account_results: List[AccountResult] = []  # 使用结构化数据存储结果
 	current_balances = {}
 	need_notify = False  # 是否需要发送通知
 	balance_changed = False  # 余额是否有变化
@@ -309,6 +311,14 @@ async def main():
 		account_key = f'account_{i + 1}'
 		try:
 			success, user_info = await check_in_account(account, i)
+			account_name = get_account_display_name(account, i)
+
+			# 创建账号结果
+			account_result = AccountResult(
+				name=account_name,
+				status="success" if success else "failed"
+			)
+
 			if success:
 				success_count += 1
 
@@ -319,31 +329,37 @@ async def main():
 			if not success:
 				should_notify_this_account = True
 				need_notify = True
-				account_name = get_account_display_name(account, i)
 				print(f'[NOTIFY] {account_name} failed, will send notification')
 
-			# 收集余额数据
+			# 收集余额数据和处理结果
 			if user_info and user_info.get('success'):
 				current_quota = user_info['quota']
 				current_used = user_info['used_quota']
 				current_balances[account_key] = {'quota': current_quota, 'used': current_used}
 
-			# 只有需要通知的账号才收集内容
+				# 设置账号结果的余额信息
+				account_result.quota = current_quota
+				account_result.used = current_used
+			elif user_info:
+				# 设置错误信息
+				account_result.error = user_info.get('error', '未知错误')
+
+			# 只有需要通知的账号才添加到结果列表
 			if should_notify_this_account:
-				account_name = get_account_display_name(account, i)
-				status = '[SUCCESS]' if success else '[FAIL]'
-				account_result = f'{status} {account_name}'
-				if user_info and user_info.get('success'):
-					account_result += f'\n{user_info["display"]}'
-				elif user_info:
-					account_result += f'\n{user_info.get("error", "Unknown error")}'
-				notification_content.append(account_result)
+				account_results.append(account_result)
 
 		except Exception as e:
 			account_name = get_account_display_name(account, i)
 			print(f'[FAILED] {account_name} processing exception: {e}')
 			need_notify = True  # 异常也需要通知
-			notification_content.append(f'[FAIL] {account_name} exception: {str(e)[:50]}...')
+
+			# 创建失败的账号结果
+			account_result = AccountResult(
+				name=account_name,
+				status="failed",
+				error=f'异常: {str(e)[:50]}...'
+			)
+			account_results.append(account_result)
 
 	# 检查余额变化
 	current_balance_hash = generate_balance_hash(current_balances) if current_balances else None
@@ -367,41 +383,42 @@ async def main():
 			account_key = f'account_{i + 1}'
 			if account_key in current_balances:
 				account_name = get_account_display_name(account, i)
-				# 只添加成功获取余额的账号，且避免重复添加
-				account_result = f'[BALANCE] {account_name}'
-				account_result += f'\n:money: Current balance: ${current_balances[account_key]["quota"]}, Used: ${current_balances[account_key]["used"]}'
-				# 检查是否已经在通知内容中（避免重复）
-				if not any(account_name in item for item in notification_content):
-					notification_content.append(account_result)
+				# 检查是否已经在结果列表中（避免重复）
+				if not any(result.name == account_name for result in account_results):
+					account_result = AccountResult(
+						name=account_name,
+						status="success",
+						quota=current_balances[account_key]["quota"],
+						used=current_balances[account_key]["used"]
+					)
+					account_results.append(account_result)
 
 	# 保存当前余额hash
 	if current_balance_hash:
 		save_balance_hash(current_balance_hash)
 
-	if need_notify and notification_content:
-		# 构建通知内容
-		summary = [
-			'[STATS] Check-in result statistics:',
-			f'[SUCCESS] Success: {success_count}/{total_count}',
-			f'[FAIL] Failed: {total_count - success_count}/{total_count}',
-		]
+	if need_notify and account_results:
+		# 构建结构化通知数据
+		stats = NotificationStats(
+			success_count=success_count,
+			failed_count=total_count - success_count,
+			total_count=total_count
+		)
 
-		if success_count == total_count:
-			summary.append('[SUCCESS] All accounts check-in successful!')
-		elif success_count > 0:
-			summary.append('[WARN] Some accounts check-in successful')
-		else:
-			summary.append('[ERROR] All accounts check-in failed')
+		notification_data = NotificationData(
+			accounts=account_results,
+			stats=stats,
+			timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+		)
 
-		time_info = f'[TIME] Execution time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
-
-		notify_content = '\n\n'.join([time_info, '\n'.join(notification_content), '\n'.join(summary)])
-
-		print(notify_content)
-		notify.push_message('AnyRouter Check-in Alert', notify_content, msg_type='text')
+		# 发送通知
+		notify.push_message('AnyRouter 签到提醒', notification_data, msg_type='text')
 		print('[NOTIFY] Notification sent due to failures or balance changes')
 	else:
 		print('[INFO] All accounts successful and no balance changes detected, notification skipped')
+
+	# 日志总结
+	print(f'[RESULT] Final result: Success {success_count}/{total_count}, Failed {total_count - success_count}/{total_count}')
 
 	# 设置退出码
 	sys.exit(0 if success_count > 0 else 1)

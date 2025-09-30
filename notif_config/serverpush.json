@@ -1,0 +1,4 @@
+{
+  "platform_settings": {},
+  "template": "{# Server酱通知模板 #}{% if timestamp %}[TIME] Execution time: {{ timestamp }}\n\n{% endif %}{% if success_accounts %}{% for account in success_accounts %}[BALANCE] {{ account.name }}\n:money: Current balance: ${{ account.quota }}, Used: ${{ account.used }}\n{% endfor %}{% endif %}{% if failed_accounts %}{% for account in failed_accounts %}[FAIL] {{ account.name }} exception: {{ account.error }}\n{% endfor %}{% endif %}\n[STATS] Check-in result statistics:\n[SUCCESS] Success: {{ stats.success_count }}/{{ stats.total_count }}\n[FAIL] Failed: {{ stats.failed_count }}/{{ stats.total_count }}\n{% if all_success %}[SUCCESS] All accounts check-in successful!{% else %}{% if partial_success %}[WARN] Some accounts check-in successful{% else %}[ERROR] All accounts check-in failed{% endif %}{% endif %}"
+}
