@@ -15,8 +15,6 @@ from models import (
 	PushPlusConfig,
 	ServerPushConfig,
 	NotificationData,
-	AccountResult,
-	NotificationStats,
 )
 
 
@@ -342,17 +340,12 @@ class NotificationKit:
 				'timestamp': data.timestamp,
 				'stats': data.stats,  # dataclass 对象，支持 {{ stats.success_count }}
 
-				# 提供分组的账号列表（AccountResult 对象，不是字典）
+				# 提供分组的账号列表（AccountResult 对象）
 				'success_accounts': success_accounts,
 				'failed_accounts': failed_accounts,
 
 				# 保留完整列表供需要的模板使用
 				'accounts': data.accounts,  # AccountResult 对象列表
-
-				# 向后兼容：平铺的统计数据
-				'success_count': data.stats.success_count,
-				'failed_count': data.stats.failed_count,
-				'total_count': data.stats.total_count,
 
 				# 便利变量：布尔标志
 				'has_success': len(success_accounts) > 0,
