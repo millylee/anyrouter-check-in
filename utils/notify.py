@@ -4,6 +4,10 @@ from email.mime.text import MIMEText
 from typing import Literal
 
 import httpx
+from dotenv import load_dotenv
+
+# 加载环境变量
+load_dotenv()
 
 
 class NotificationKit:
@@ -20,7 +24,7 @@ class NotificationKit:
 
 	def send_email(self, title: str, content: str, msg_type: Literal['text', 'html'] = 'text'):
 		if not self.email_user or not self.email_pass or not self.email_to:
-			raise ValueError('Email configuration not set')
+			raise ValueError('邮箱配置未设置')
 
 		# MIMEText 需要 'plain' 或 'html'，而不是 'text'
 		mime_subtype = 'plain' if msg_type == 'text' else 'html'
@@ -36,7 +40,7 @@ class NotificationKit:
 
 	def send_pushplus(self, title: str, content: str):
 		if not self.pushplus_token:
-			raise ValueError('PushPlus Token not configured')
+			raise ValueError('PushPlus Token 未配置')
 
 		data = {'token': self.pushplus_token, 'title': title, 'content': content, 'template': 'html'}
 		with httpx.Client(timeout=30.0) as client:
@@ -44,7 +48,7 @@ class NotificationKit:
 
 	def send_serverPush(self, title: str, content: str):
 		if not self.server_push_key:
-			raise ValueError('Server Push key not configured')
+			raise ValueError('Server酱 SendKey 未配置')
 
 		data = {'title': title, 'desp': content}
 		with httpx.Client(timeout=30.0) as client:
@@ -52,7 +56,7 @@ class NotificationKit:
 
 	def send_dingtalk(self, title: str, content: str):
 		if not self.dingding_webhook:
-			raise ValueError('DingTalk Webhook not configured')
+			raise ValueError('钉钉 Webhook 未配置')
 
 		data = {'msgtype': 'text', 'text': {'content': f'{title}\n{content}'}}
 		with httpx.Client(timeout=30.0) as client:
@@ -60,7 +64,7 @@ class NotificationKit:
 
 	def send_feishu(self, title: str, content: str):
 		if not self.feishu_webhook:
-			raise ValueError('Feishu Webhook not configured')
+			raise ValueError('飞书 Webhook 未配置')
 
 		data = {
 			'msg_type': 'interactive',
@@ -74,7 +78,7 @@ class NotificationKit:
 
 	def send_wecom(self, title: str, content: str):
 		if not self.weixin_webhook:
-			raise ValueError('WeChat Work Webhook not configured')
+			raise ValueError('企业微信 Webhook 未配置')
 
 		data = {'msgtype': 'text', 'text': {'content': f'{title}\n{content}'}}
 		with httpx.Client(timeout=30.0) as client:
@@ -82,20 +86,20 @@ class NotificationKit:
 
 	def push_message(self, title: str, content: str, msg_type: Literal['text', 'html'] = 'text'):
 		notifications = [
-			('Email', lambda: self.send_email(title, content, msg_type)),
-			('PushPlus', lambda: self.send_pushplus(title, content)),
-			('Server Push', lambda: self.send_serverPush(title, content)),
-			('DingTalk', lambda: self.send_dingtalk(title, content)),
-			('Feishu', lambda: self.send_feishu(title, content)),
-			('WeChat Work', lambda: self.send_wecom(title, content)),
+			('📧 邮箱', lambda: self.send_email(title, content, msg_type)),
+			('📱 PushPlus', lambda: self.send_pushplus(title, content)),
+			('🔔 Server酱', lambda: self.send_serverPush(title, content)),
+			('💬 钉钉', lambda: self.send_dingtalk(title, content)),
+			('📲 飞书', lambda: self.send_feishu(title, content)),
+			('💼 企业微信', lambda: self.send_wecom(title, content)),
 		]
 
 		for name, func in notifications:
 			try:
 				func()
-				print(f'[{name}]: Message push successful!')
+				print(f'{name}: 消息推送成功！')
 			except Exception as e:
-				print(f'[{name}]: Message push failed! Reason: {str(e)}')
+				print(f'{name}: 消息推送失败！原因: {str(e)}')
 
 
 notify = NotificationKit()

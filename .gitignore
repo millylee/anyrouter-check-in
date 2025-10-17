@@ -5,3 +5,14 @@ __pycache__
 .pytest_cache
 .ruff_cache
 balance_hash.txt
+.idea
+
+# User credentials and extracted data
+node_modules
+get_user/user.json
+get_user/anyrouter_accounts.json
+get_user/anyrouter_accounts.txt
+
+# Debug files
+get_user/debug_*.html
+get_user/debug_*.png

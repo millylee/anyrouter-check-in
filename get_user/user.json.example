@@ -1,0 +1,14 @@
+[
+  {
+    "name": "主账号",
+    "provider": "anyrouter",
+    "username": "your_username",
+    "password": "your_password"
+  },
+  {
+    "name": "备用账号",
+    "provider": "anyrouter",
+    "username": "your_username",
+    "password": "your_password"
+  }
+]
