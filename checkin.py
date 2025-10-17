@@ -20,7 +20,7 @@ from utils.notify import notify
 load_dotenv()
 
 # 浏览器无头模式：True=不显示浏览器窗口（服务器环境），False=显示浏览器窗口（本地调试）
-HEADLESS = False
+HEADLESS = True
 BALANCE_HASH_FILE = 'balance_hash.txt'
 
 
