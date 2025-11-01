@@ -36,7 +36,7 @@
 6. 复制所有 cookies
 
 #### 获取 API User：
-通常在网站的用户设置或 API 设置中可以找到，每个账号都有唯一的标识。
+按照下方图片教程操作获得。
 
 ### 3. 设置 GitHub Environment Secret
 
