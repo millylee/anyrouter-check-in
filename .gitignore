@@ -1,7 +1,37 @@
-.claude
+# Python 虚拟环境
+.venv/
+venv/
+env/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.ruff_cache/
+
+# 环境变量配置（包含敏感信息）
 .env
-.venv
-__pycache__
-.pytest_cache
-.ruff_cache
+.env.local
+
+# IDE 配置
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+*~
+
+# 项目特定文件
 balance_hash.txt
+
+# 测试和临时文件
+test_email.py
+*.log
+*.tmp
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+desktop.ini

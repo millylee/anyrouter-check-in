@@ -36,9 +36,32 @@ class NotificationKit:
 		msg['Subject'] = title
 
 		smtp_server = self.smtp_server if self.smtp_server else f'smtp.{self.email_user.split("@")[1]}'
-		with smtplib.SMTP_SSL(smtp_server, 465) as server:
+		server = None
+		try:
+			# 优先使用 SSL 465 端口
+			server = smtplib.SMTP_SSL(smtp_server, 465, timeout=30)
 			server.login(self.email_user, self.email_pass)
 			server.send_message(msg)
+			# 手动关闭，忽略 QUIT 响应错误
+			try:
+				server.quit()
+			except:
+				pass  # 忽略 QQ 邮箱 QUIT 时的异常响应
+		except Exception as e:
+			# 如果 SSL 465 失败，尝试 STARTTLS 587 端口
+			if server:
+				try:
+					server.close()
+				except:
+					pass
+			server = smtplib.SMTP(smtp_server, 587, timeout=30)
+			server.starttls()
+			server.login(self.email_user, self.email_pass)
+			server.send_message(msg)
+			try:
+				server.quit()
+			except:
+				pass  # 忽略 QUIT 异常
 
 	def send_pushplus(self, title: str, content: str):
 		if not self.pushplus_token:

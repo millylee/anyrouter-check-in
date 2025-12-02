@@ -15,6 +15,20 @@
 - ✅ 多种机器人通知（可选）
 - ✅ 绕过 WAF 限制
 
+## 📚 文档导航
+
+### 快速开始
+- **[5分钟快速配置](docs/QUICK_START.md)** - 最简单的配置方式
+- **[邮件通知配置](docs/EMAIL_NOTIFICATION_GUIDE.md)** - 如何在 GitHub Actions 中配置邮件通知 ⭐
+
+### 详细指南
+- **[GitHub Actions 配置](docs/GITHUB_ACTIONS_GUIDE.md)** - 完整的自动化配置指南
+- **[本地测试指南](docs/TEST_GUIDE.md)** - 本地环境搭建和测试
+
+### 参考资料
+- **[项目结构说明](docs/PROJECT_STRUCTURE.md)** - 了解项目文件组织
+- **[安全检查清单](docs/SECURITY_CHECKLIST.md)** - 隐私保护最佳实践
+
 ## 使用方法
 
 ### 1. Fork 本仓库
