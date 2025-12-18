@@ -1,97 +1,164 @@
-name: AnyRouter 自动签到
+name: "🚀 AnyRouter/AgentRouter 自动签到"
+
 on:
+  # 每天北京时间 9:00 (UTC 1:00) 和 10:00 (UTC 2:00)
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '0 1 * * *'  # UTC 1:00 = 北京时间 9:00
+    - cron: '0 2 * * *'  # UTC 2:00 = 北京时间 10:00
+  # 手动触发
   workflow_dispatch:
+    inputs:
+      run_now:
+        description: '立即运行签到'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+# 只运行一个实例，避免重复执行
+concurrency:
+  group: anyrouter-checkin
+  cancel-in-progress: false
 
 jobs:
   checkin:
-    runs-on: windows-2025
-    environment: production
-    env:
-      PYTHONIOENCODING: utf-8
+    runs-on: ubuntu-latest
+    timeout-minutes: 15  # 防止超时浪费积分
+
     steps:
-    - uses: actions/checkout@v4
+      # 1. 检出代码
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-    - uses: astral-sh/setup-uv@v3
-      with:
-        version: "latest"
+      # 2. 设置 Python
+      - name: 🔧 设置 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
 
-    - uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      # 3. 安装依赖
+      - name: ⚙️ 安装 Python 依赖
+        run: |
+          pip install httpx playwright python-dotenv
+          echo "✅ 基础依赖安装完成"
 
-    - name: 缓存 UV 依赖
-      uses: actions/cache@v4
-      id: uv-cache
-      with:
-        path: |
-          ~/.cache/uv
-          .venv
-        key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml', 'uv.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-uv-
+      # 4. 缓存 Playwright 浏览器
+      - name: 🗂️ 缓存 Playwright 浏览器
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: |
+            ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
 
-    - name: 安装依赖
-      if: steps.uv-cache.outputs.cache-hit != 'true'
-      run: |
-        echo "缓存未命中，开始安装项目依赖..."
-        uv sync
-        echo "✅ 环境初始化完成"
+      # 5. 安装 Playwright 浏览器（如未缓存）
+      - name: 🌐 安装 Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: |
+          playwright install chromium
+          echo "✅ 浏览器安装完成"
 
-    - name: 获取 Playwright 版本
-      id: playwright-version
-      run: |
-        $version = uv run python -c "import importlib.metadata; print(importlib.metadata.version('playwright'))"
-        echo "version=$version" >> $env:GITHUB_OUTPUT
-        echo "Playwright version: $version"
+      # 6. 恢复余额历史记录（用于检测变化）
+      - name: 📊 恢复余额历史缓存
+        uses: actions/cache@v4
+        with:
+          path: balance_hash.txt
+          key: balance-hash-${{ github.ref_name }}
+          restore-keys: |
+            balance-hash-${{ github.ref_name }}
+            balance-hash-main
 
-    - name: 缓存 Playwright 浏览器
-      uses: actions/cache@v4
-      id: playwright-cache
-      with:
-        path: ~\AppData\Local\ms-playwright
-        key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
-        restore-keys: |
-          ${{ runner.os }}-playwright-
+      # 7. 执行签到任务
+      - name: 🚀 执行签到
+        id: checkin
+        env:
+          # 核心配置 - 使用 GitHub Secrets
+          ANYROUTER_ACCOUNTS: ${{ secrets.ANYROUTER_ACCOUNTS }}
 
-    - name: 安装 Playwright 浏览器
-      if: steps.playwright-cache.outputs.cache-hit != 'true'
-      run: |
-        echo "缓存未命中，开始安装 Playwright 浏览器..."
-        uv run playwright install chromium --with-deps
+          # 通知配置（可选）
+          EMAIL_ENABLED: ${{ secrets.EMAIL_ENABLED }}
+          EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
+          EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
 
-    - name: 恢复余额历史缓存
-      uses: actions/cache@v4
-      with:
-        path: balance_hash.txt
-        key: balance-hash-${{ github.sha }}
-        restore-keys: |
-          balance-hash-
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          SERVERPUSHKEY: ${{ secrets.SERVERPUSHKEY }}
+          DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+          WECHAT_WORK_KEY: ${{ secrets.WECHAT_WORK_KEY }}
+          GOTIFY_URL: ${{ secrets.GOTIFY_URL }}
+          GOTIFY_TOKEN: ${{ secrets.GOTIFY_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          echo "🔍 检查配置..."
+          if [ -z "${{ secrets.ANYROUTER_ACCOUNTS }}" ]; then
+            echo "❌ 错误: 未设置 ANYROUTER_ACCOUNTS secrets"
+            echo "请在仓库 Settings -> Secrets and variables -> Actions 中添加"
+            exit 1
+          fi
 
-    - name: 执行签到
-      env:
-        ANYROUTER_ACCOUNTS: ${{ secrets.ANYROUTER_ACCOUNTS }}
-        PROVIDERS: ${{ secrets.PROVIDERS }}
-        DINGDING_WEBHOOK: ${{ secrets.DINGDING_WEBHOOK }}
-        EMAIL_USER: ${{ secrets.EMAIL_USER }}
-        EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
-        EMAIL_TO: ${{ secrets.EMAIL_TO }}
-        CUSTOM_SMTP_SERVER: ${{ secrets.CUSTOM_SMTP_SERVER }}
-        PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
-        SERVERPUSHKEY: ${{ secrets.SERVERPUSHKEY }}
-        FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
-        WEIXIN_WEBHOOK: ${{ secrets.WEIXIN_WEBHOOK }}
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        GOTIFY_URL: ${{ secrets.GOTIFY_URL }}
-        GOTIFY_TOKEN: ${{ secrets.GOTIFY_TOKEN }}
-        GOTIFY_PRIORITY: ${{ secrets.GOTIFY_PRIORITY }}
-      run: |
-        uv run checkin.py
+          echo "✅ 配置存在，开始执行签到..."
+          python checkin.py
 
-    - name: 执行结果
-      if: always()
-      run: |
-        echo "签到任务执行完成"
-        echo "时间: $(Get-Date)"
+          # 保存退出码
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+
+      # 8. 保存余额历史（用于下次比较）
+      - name: 💾 保存余额历史
+        if: always()
+        uses: actions/cache@v4
+        with:
+          path: balance_hash.txt
+          key: balance-hash-${{ github.ref_name }}-${{ github.run_number }}
+          restore-keys: |
+            balance-hash-${{ github.ref_name }}
+
+      # 9. 发送执行结果通知（仅在失败时，避免过度通知）
+      - name: 📬 发送失败通知
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const webhookUrl = process.env.DINGTALK_WEBHOOK;
+            if (!webhookUrl) return;
+
+            const payload = {
+              msgtype: "markdown",
+              markdown: {
+                title: "AnyRouter 签到失败",
+                text: `## ❌ AnyRouter 签到失败\n\n**仓库**: ${context.repo.repo}\n**时间**: ${new Date().toLocaleString('zh-CN')}\n**工作流**: ${context.workflow}\n\n请检查日志或配置。`
+              }
+            };
+
+            await fetch(webhookUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+
+      # 10. 总结输出
+      - name: 📋 执行总结
+        if: always()
+        run: |
+          echo "========== 执行总结 =========="
+          echo "时间: $(date '+%Y-%m-%d %H:%M:%S')"
+          echo "状态: ${{ needs.checkin.result || 'COMPLETED' }}"
+          echo "触发: ${{ github.event_name }}"
+          echo "=============================="
+
+          # 显示余额历史文件信息
+          if [ -f balance_hash.txt ]; then
+            echo "余额历史文件大小: $(wc -c < balance_hash.txt) bytes"
+          else
+            echo "⚠️ 未找到余额历史文件"
+          fi

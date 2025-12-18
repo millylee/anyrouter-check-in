@@ -136,8 +136,22 @@ def get_user_info(client, headers, user_info_url: str):
 
 		if response.status_code == 200:
 			data = response.json()
+
+			# 标准 NewAPI 格式处理
 			if data.get('success'):
 				user_data = data.get('data', {})
+
+				# 检查是否为 AgentRouter status 接口（无余额信息）
+				if 'announcements' in user_data:
+					return {
+						'success': True,
+						'quota': 0,
+						'used_quota': 0,
+						'display': ':information: AgentRouter 服务运行正常',
+						'agentrouter_status': True
+					}
+
+				# 正常用户信息接口
 				quota = round(user_data.get('quota', 0) / 500000, 2)
 				used_quota = round(user_data.get('used_quota', 0) / 500000, 2)
 				return {
@@ -146,7 +160,9 @@ def get_user_info(client, headers, user_info_url: str):
 					'used_quota': used_quota,
 					'display': f':money: Current balance: ${quota}, Used: ${used_quota}',
 				}
+
 		return {'success': False, 'error': f'Failed to get user info: HTTP {response.status_code}'}
+
 	except Exception as e:
 		return {'success': False, 'error': f'Failed to get user info: {str(e)[:50]}...'}
 
@@ -223,7 +239,7 @@ async def check_in_account(account: AccountConfig, account_index: int, app_confi
 	if not all_cookies:
 		return False, None
 
-	client = httpx.Client(http2=True, timeout=30.0)
+	client = httpx.Client(timeout=30.0)
 
 	try:
 		client.cookies.update(all_cookies)
