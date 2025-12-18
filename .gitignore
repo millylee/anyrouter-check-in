@@ -5,3 +5,5 @@ __pycache__
 .pytest_cache
 .ruff_cache
 balance_hash.txt
+config.json
+balance_hash.txt
