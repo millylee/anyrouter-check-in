@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Secrets 配置生成器 | AnyRouter</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --secondary: #64748b;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --bg-body: #f3f4f6;
+            --bg-card: #ffffff;
+            --border-color: #e2e8f0;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+            --radius-lg: 12px;
+            --radius-md: 8px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            line-height: 1.5;
+            padding: 2rem 1rem;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(79, 70, 229, 0.1) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(16, 185, 129, 0.1) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(239, 68, 68, 0.05) 0px, transparent 50%);
+            background-attachment: fixed;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            animation: fadeInDown 0.6s ease-out;
+        }
+
+        header h1 {
+            font-size: 2.25rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary) 0%, #818cf8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.75rem;
+            letter-spacing: -0.025em;
+        }
+
+        header p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            border: 1px solid rgba(255,255,255,0.5);
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+            animation: fadeInUp 0.5s ease-out forwards;
+            opacity: 0;
+        }
+
+        .card:hover {
+            box-shadow: var(--shadow-lg);
+        }
+
+        .card-header {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(248, 250, 252, 0.5);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .card-title {
+            font-weight: 600;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: var(--text-main);
+        }
+
+        .card-icon {
+            width: 24px;
+            height: 24px;
+            color: var(--primary);
+        }
+
+        .card-body {
+            padding: 1.5rem;
+            display: block;
+        }
+        
+        .card-body.hidden {
+            display: none;
+        }
+
+        /* Forms */
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .form-group:last-child {
+            margin-bottom: 0;
+        }
+
+        label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-main);
+            margin-bottom: 0.5rem;
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="password"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            font-family: inherit;
+            font-size: 0.95rem;
+            transition: all 0.2s;
+            background: #fff;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+
+        input.invalid {
+            border-color: var(--danger);
+            background-color: #fef2f2;
+        }
+
+        .help-text {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.375rem;
+        }
+
+        .error-text {
+            font-size: 0.8rem;
+            color: var(--danger);
+            margin-top: 0.375rem;
+            display: none;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        
+        .error-text.visible {
+            display: flex;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.75rem 1.5rem;
+            border-radius: var(--radius-md);
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            gap: 0.5rem;
+            font-size: 0.95rem;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.3);
+            width: 100%;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 8px -1px rgba(79, 70, 229, 0.4);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px dashed var(--border-color);
+            color: var(--text-muted);
+            width: 100%;
+        }
+
+        .btn-outline:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: #f8fafc;
+        }
+
+        .btn-danger-soft {
+            background: #fee2e2;
+            color: #ef4444;
+            padding: 0.4rem 0.8rem;
+            font-size: 0.85rem;
+        }
+
+        .btn-danger-soft:hover {
+            background: #fecaca;
+        }
+
+        /* Account Item */
+        .account-item {
+            background: #f8fafc;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+            position: relative;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .account-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-primary { background: #e0e7ff; color: var(--primary); }
+        .badge-warning { background: #fef3c7; color: #d97706; }
+
+        /* Output Section */
+        .output-container {
+            margin-top: 2rem;
+            display: none;
+        }
+
+        .secret-card {
+            background: #1e293b;
+            border-radius: var(--radius-md);
+            margin-bottom: 1rem;
+            overflow: hidden;
+            border: 1px solid #334155;
+        }
+
+        .secret-header {
+            background: #0f172a;
+            padding: 0.75rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #334155;
+        }
+
+        .secret-name {
+            color: #e2e8f0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .secret-content {
+            padding: 1rem;
+            color: #94a3b8;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 200px;
+        }
+
+        /* Modern Copy Button */
+        .copy-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #e2e8f0;
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .copy-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .copy-btn:active {
+            transform: scale(0.95);
+        }
+        
+        .copy-btn.copied {
+            background: #10b981;
+            border-color: #10b981;
+            color: white;
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            background: #1e293b;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 9999px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            z-index: 100;
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* Animations */
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* SVG Icons */
+        .icon { width: 1.25em; height: 1.25em; stroke-width: 2; }
+    </style>
+</head>
+<body>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" style="color: #4ade80;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+        <span>已复制到剪贴板</span>
+    </div>
+
+    <div class="container">
+        <header>
+            <h1>Secrets 配置生成器</h1>
+            <p>轻松生成 GitHub Actions 配置文件，一键部署 AnyRouter 自动签到</p>
+        </header>
+
+        <!-- Guide Card -->
+        <div class="card" style="animation-delay: 0.1s;">
+            <div class="card-header" onclick="toggleCard(this)">
+                <div class="card-title">
+                    <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                    使用指南
+                </div>
+                <svg class="icon chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </div>
+            <div class="card-body">
+                <ol style="padding-left: 1.5rem; color: var(--text-muted); line-height: 1.8;">
+                    <li>填写下方账号信息（支持多账号）。</li>
+                    <li>点击底部的 <strong>"生成配置"</strong> 按钮。</li>
+                    <li>生成的 JSON 配置将显示在页面下方。</li>
+                    <li>在 GitHub 仓库设置中创建名为 <code>production</code> 的 Environment。</li>
+                    <li>将生成的配置项添加为 Secrets (如 <code>ANYROUTER_ACCOUNTS</code>)。</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- Accounts Card -->
+        <div class="card" style="animation-delay: 0.2s;">
+            <div class="card-header">
+                <div class="card-title">
+                    <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    账号配置 (ANYROUTER_ACCOUNTS)
+                    <span class="badge badge-primary">必需</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="accountsContainer"></div>
+                <button type="button" class="btn btn-outline" onclick="addAccount()">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    添加另一个账号
+                </button>
+            </div>
+        </div>
+
+        <!-- Providers Card -->
+        <div class="card" style="animation-delay: 0.25s;">
+            <div class="card-header" onclick="toggleCard(this)">
+                <div class="card-title">
+                    <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+                    服务商配置 (PROVIDERS)
+                    <span class="badge badge-warning">可选</span>
+                </div>
+                <svg class="icon chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </div>
+            <div class="card-body hidden">
+                <div id="providersContainer"></div>
+                <button type="button" class="btn btn-outline" onclick="addProvider()">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    添加自定义服务商
+                </button>
+                <div class="help-text" style="margin-top: 1rem;">内置 <code>anyrouter</code> 和 <code>agentrouter</code>，无需额外配置。</div>
+            </div>
+        </div>
+
+        <!-- Settings Card (Tabs for Notifications/Advanced) -->
+        <div class="card" style="animation-delay: 0.3s;">
+            <div class="card-header" onclick="toggleCard(this)">
+                <div class="card-title">
+                    <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                    通知设置
+                    <span class="badge badge-warning">可选</span>
+                </div>
+                <svg class="icon chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </div>
+            <div class="card-body hidden">
+                <div class="form-group">
+                    <label>邮件通知 (SMTP)</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <input type="email" id="emailUser" placeholder="发件邮箱 (user@example.com)">
+                        <input type="password" id="emailPass" placeholder="邮箱密码/授权码">
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+                        <input type="email" id="emailTo" placeholder="收件邮箱 (留空同发件)">
+                        <input type="text" id="customSmtp" placeholder="自定义 SMTP (host:port)">
+                    </div>
+                    <div class="help-text">支持 Gmail, Outlook, QQ, 163 等常见邮箱自动识别。</div>
+                </div>
+                
+                <hr style="border: 0; border-top: 1px dashed var(--border-color); margin: 1.5rem 0;">
+
+                <div class="form-group">
+                    <label>Webhook & Tokens</label>
+                    <div style="display: grid; gap: 1rem;">
+                        <input type="text" id="pushplusToken" placeholder="PushPlus Token">
+                        <input type="text" id="serverpushkey" placeholder="Server酱 SendKey">
+                        <input type="text" id="dingdingWebhook" placeholder="钉钉 Webhook URL">
+                        <input type="text" id="feishuWebhook" placeholder="飞书 Webhook URL">
+                        <input type="text" id="weixinWebhook" placeholder="企业微信 Webhook URL">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                             <input type="text" id="telegramToken" placeholder="Telegram Bot Token">
+                             <input type="text" id="telegramChatId" placeholder="Telegram Chat ID">
+                        </div>
+                        <div style="display: grid; grid-template-columns: 2fr 2fr 1fr; gap: 1rem;">
+                             <input type="text" id="gotifyUrl" placeholder="Gotify URL (https://...)">
+                             <input type="text" id="gotifyToken" placeholder="Gotify Token">
+                             <input type="text" id="gotifyPriority" placeholder="优先级 (1-10)">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+         <!-- Generate Button -->
+         <button type="button" class="btn btn-primary" onclick="generateSecrets()" style="margin-bottom: 2rem; height: 50px; font-size: 1.1rem;">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+            生成配置代码
+        </button>
+
+        <!-- Output Section -->
+        <div id="outputSection" class="output-container">
+            <h3 style="margin-bottom: 1rem; font-weight: 600;">生成结果</h3>
+            <div id="secretsOutput"></div>
+        </div>
+    </div>
+
+    <script>
+        let accountCount = 0;
+        let providerCount = 0;
+
+        window.onload = function() {
+            addAccount();
+        };
+
+        function toggleCard(header) {
+            const body = header.nextElementSibling;
+            const icon = header.querySelector('.chevron');
+            
+            if (body.classList.contains('hidden')) {
+                body.classList.remove('hidden');
+                icon.style.transform = 'rotate(180deg)';
+            } else {
+                body.classList.add('hidden');
+                icon.style.transform = 'rotate(0deg)';
+            }
+        }
+
+        function addAccount() {
+            accountCount++;
+            const container = document.getElementById('accountsContainer');
+            const div = document.createElement('div');
+            div.className = 'account-item';
+            div.id = `account-${accountCount}`;
+            div.innerHTML = `
+                <div class="account-header-row">
+                    <span style="font-weight: 600; color: var(--text-main);">账号 #${accountCount}</span>
+                    <button type="button" class="btn-danger-soft" style="border:none; border-radius:4px; cursor:pointer;" onclick="removeAccount(${accountCount})">删除</button>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>服务商 (Provider)</label>
+                        <select id="provider-${accountCount}">
+                            <option value="anyrouter">anyrouter (默认)</option>
+                            <option value="agentrouter">agentrouter</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>备注名称 (可选)</label>
+                        <input type="text" id="name-${accountCount}" placeholder="例如: 我的主账号">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Session Cookie <span style="color:var(--danger)">*</span></label>
+                    <textarea id="session-${accountCount}" rows="2" 
+                        placeholder="粘贴完整的 session 字符串..." 
+                        onblur="validateSession(this, ${accountCount})"></textarea>
+                    <div class="error-text" id="session-${accountCount}-error">
+                        <svg class="icon" style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                        <span></span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>API User ID <span style="color:var(--danger)">*</span></label>
+                    <div class="input-wrapper">
+                        <input type="text" id="apiUser-${accountCount}" placeholder="自动提取中..." readonly style="background-color: #f1f5f9; cursor: not-allowed;">
+                    </div>
+                    <div class="help-text">
+                        <label style="display:inline-flex; align-items:center; cursor:pointer; font-size: 0.8rem;">
+                            <input type="checkbox" id="autoId-${accountCount}" checked onchange="toggleManualId(this, ${accountCount})" style="width:auto; margin-right:6px;"> 
+                            从 Session 自动提取 <span style="color: var(--warning); margin-left: 4px; font-size: 0.75rem;">(可能不准确)</span>
+                        </label>
+                    </div>
+                </div>
+            `;
+            container.appendChild(div);
+            updateProviderDropdowns();
+        }
+
+        function removeAccount(id) {
+            const el = document.getElementById(`account-${id}`);
+            if(el) {
+                el.style.opacity = '0';
+                el.style.transform = 'scale(0.95)';
+                setTimeout(() => el.remove(), 200);
+            }
+        }
+
+        function addProvider() {
+            providerCount++;
+            const container = document.getElementById('providersContainer');
+            const div = document.createElement('div');
+            div.className = 'account-item';
+            div.id = `provider-item-${providerCount}`;
+            div.innerHTML = `
+                <div class="account-header-row">
+                    <span style="font-weight: 600; color: var(--text-main);">自定义服务商 #${providerCount}</span>
+                    <button type="button" class="btn-danger-soft" style="border:none; border-radius:4px; cursor:pointer;" onclick="removeProvider(${providerCount})">删除</button>
+                </div>
+                <div class="form-group">
+                    <label>标识名 (ID) <span style="color:var(--danger)">*</span></label>
+                    <input type="text" class="p-id" placeholder="例如: customrouter" oninput="updateProviderDropdowns()">
+                </div>
+                <div class="form-group">
+                    <label>域名 (Domain) <span style="color:var(--danger)">*</span></label>
+                    <input type="text" class="p-domain" placeholder="https://custom.example.com">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div class="form-group">
+                        <label>签到路径 (Sign In Path)</label>
+                        <input type="text" class="p-signin" placeholder="/api/user/sign_in">
+                    </div>
+                    <div class="form-group">
+                        <label>用户路径 (User Info Path)</label>
+                        <input type="text" class="p-userinfo" placeholder="/api/user/self">
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label>API User 请求头</label>
+                        <input type="text" class="p-userkey" placeholder="new-api-user">
+                    </div>
+                    <div class="form-group">
+                        <label>绕过方法 (Bypass Method)</label>
+                        <select class="p-bypass">
+                            <option value="">None (直接请求)</option>
+                            <option value="waf_cookies">waf_cookies (Playwright 绕过)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>WAF Cookie 名称 (JSON 数组)</label>
+                    <input type="text" class="p-wafcookies" placeholder='["acw_tc", "cdn_sec_tc", "acw_sc__v2"]'>
+                </div>
+            `;
+            container.appendChild(div);
+            updateProviderDropdowns();
+        }
+
+        function removeProvider(id) {
+            const el = document.getElementById(`provider-item-${id}`);
+            if(el) {
+                el.remove();
+                updateProviderDropdowns();
+            }
+        }
+
+        function updateProviderDropdowns() {
+            const customIds = Array.from(document.querySelectorAll('.p-id')).map(el => el.value.trim()).filter(v => v);
+            const selects = document.querySelectorAll('select[id^="provider-"]');
+            
+            selects.forEach(select => {
+                const currentVal = select.value;
+                select.innerHTML = `
+                    <option value="anyrouter">anyrouter (默认)</option>
+                    <option value="agentrouter">agentrouter</option>
+                `;
+                customIds.forEach(id => {
+                    const opt = document.createElement('option');
+                    opt.value = id;
+                    opt.textContent = id;
+                    select.appendChild(opt);
+                });
+                if ([...select.options].some(o => o.value === currentVal)) {
+                    select.value = currentVal;
+                }
+            });
+        }
+
+        function toggleManualId(checkbox, id) {
+            const input = document.getElementById(`apiUser-${id}`);
+            if (checkbox.checked) {
+                input.readOnly = true;
+                input.style.backgroundColor = '#f1f5f9';
+                input.style.cursor = 'not-allowed';
+                const sessionInput = document.getElementById(`session-${id}`);
+                if (sessionInput.value) validateSession(sessionInput, id);
+            } else {
+                input.readOnly = false;
+                input.style.backgroundColor = '#fff';
+                input.style.cursor = 'text';
+                input.placeholder = '手动输入 User ID (5-10位数字)';
+                input.focus();
+            }
+        }
+
+        function validateSession(input, id) {
+            const val = input.value.trim();
+            const errorEl = document.getElementById(`session-${id}-error`);
+            const apiUserInput = document.getElementById(`apiUser-${id}`);
+            const autoIdCheck = document.getElementById(`autoId-${id}`);
+
+            if (!val) {
+                input.classList.remove('invalid');
+                errorEl.classList.remove('visible');
+                return;
+            }
+
+            try {
+                const base64Str = val.replace(/-/g, '+').replace(/_/g, '/');
+                const padded = base64Str.padEnd(base64Str.length + (4 - base64Str.length % 4) % 4, '=');
+                const decoded = atob(padded);
+                const parts = decoded.split('|');
+                if (parts.length < 3) throw new Error("Session 结构无效");
+                const payloadB64 = parts[1];
+
+                if (autoIdCheck.checked) {
+                    try {
+                        const pB64 = payloadB64.replace(/-/g, '+').replace(/_/g, '/');
+                        const payloadDecoded = atob(pB64);
+                        const idMatch = payloadDecoded.match(/(\d{5,10})/g);
+                        if (idMatch) {
+                            apiUserInput.value = idMatch[0];
+                        } else {
+                            throw new Error("未找到 ID");
+                        }
+                    } catch (e) {
+                        apiUserInput.value = '';
+                        apiUserInput.placeholder = '未能自动提取，请取消勾选并手动输入';
+                    }
+                }
+
+                input.classList.remove('invalid');
+                errorEl.classList.remove('visible');
+            } catch (e) {
+                input.classList.add('invalid');
+                errorEl.querySelector('span').textContent = 'Session 格式无效 (Base64 解码失败)';
+                errorEl.classList.add('visible');
+            }
+        }
+
+        function generateSecrets() {
+            const secrets = {};
+            const accounts = [];
+            
+            // Collect Accounts
+            document.querySelectorAll('.account-item[id^="account-"]').forEach(el => {
+                const id = el.id.split('-')[1];
+                const session = document.getElementById(`session-${id}`).value.trim();
+                const apiUser = document.getElementById(`apiUser-${id}`).value.trim();
+                const name = document.getElementById(`name-${id}`).value.trim();
+                const provider = document.getElementById(`provider-${id}`).value;
+
+                if (session && apiUser) {
+                    const acc = { 
+                        cookies: { session }, 
+                        api_user: apiUser 
+                    };
+                    if (name) acc.name = name;
+                    if (provider !== 'anyrouter') acc.provider = provider;
+                    accounts.push(acc);
+                }
+            });
+
+            if (accounts.length === 0) {
+                showToast('❌ 请至少配置一个有效的账号');
+                return;
+            }
+
+            secrets.ANYROUTER_ACCOUNTS = JSON.stringify(accounts, null, 2);
+
+            // Collect Providers
+            const providers = {};
+            document.querySelectorAll('.account-item[id^="provider-item-"]').forEach(el => {
+                const id = el.querySelector('.p-id').value.trim();
+                const domain = el.querySelector('.p-domain').value.trim();
+                const sign_in_path = el.querySelector('.p-signin').value.trim();
+                const user_info_path = el.querySelector('.p-userinfo').value.trim();
+                const api_user_key = el.querySelector('.p-userkey').value.trim();
+                const bypass_method = el.querySelector('.p-bypass').value;
+                const waf_cookies = el.querySelector('.p-wafcookies').value.trim();
+
+                if (id && domain) {
+                    providers[id] = { domain };
+                    if (sign_in_path) providers[id].sign_in_path = sign_in_path;
+                    if (user_info_path) providers[id].user_info_path = user_info_path;
+                    if (api_user_key) providers[id].api_user_key = api_user_key;
+                    if (bypass_method) providers[id].bypass_method = bypass_method;
+                    if (waf_cookies) {
+                        try {
+                            providers[id].waf_cookie_names = JSON.parse(waf_cookies);
+                        } catch (e) {
+                            showToast(`❌ 服务商 ${id} 的 WAF Cookie 格式无效`);
+                        }
+                    }
+                }
+            });
+
+            if (Object.keys(providers).length > 0) {
+                secrets.PROVIDERS = JSON.stringify(providers, null, 2);
+            }
+
+            // Collect Notifications
+            const simpleIds = ['pushplusToken', 'serverpushkey', 'dingdingWebhook', 'feishuWebhook', 'weixinWebhook', 'telegramToken', 'telegramChatId'];
+            const mapping = {
+                'pushplusToken': 'PUSHPLUS_TOKEN',
+                'serverpushkey': 'SERVERPUSHKEY',
+                'dingdingWebhook': 'DINGDING_WEBHOOK',
+                'feishuWebhook': 'FEISHU_WEBHOOK',
+                'weixinWebhook': 'WEIXIN_WEBHOOK',
+                'telegramToken': 'TELEGRAM_BOT_TOKEN',
+                'telegramChatId': 'TELEGRAM_CHAT_ID'
+            };
+
+            simpleIds.forEach(eid => {
+                const val = document.getElementById(eid).value.trim();
+                if (val) secrets[mapping[eid]] = val;
+            });
+
+            // Email
+            const emailUser = document.getElementById('emailUser').value.trim();
+            const emailPass = document.getElementById('emailPass').value.trim();
+            if (emailUser && emailPass) {
+                secrets.EMAIL_USER = emailUser;
+                secrets.EMAIL_PASS = emailPass;
+                const to = document.getElementById('emailTo').value.trim();
+                const smtp = document.getElementById('customSmtp').value.trim();
+                if (to) secrets.EMAIL_TO = to;
+                if (smtp) secrets.CUSTOM_SMTP_SERVER = smtp;
+            }
+
+            // Gotify
+            const gotifyUrl = document.getElementById('gotifyUrl').value.trim();
+            const gotifyToken = document.getElementById('gotifyToken').value.trim();
+            if (gotifyUrl && gotifyToken) {
+                secrets.GOTIFY_URL = gotifyUrl;
+                secrets.GOTIFY_TOKEN = gotifyToken;
+                const priority = document.getElementById('gotifyPriority').value.trim();
+                if (priority) secrets.GOTIFY_PRIORITY = priority;
+            }
+
+            renderOutput(secrets);
+        }
+
+        function renderOutput(secrets) {
+            const container = document.getElementById('secretsOutput');
+            const section = document.getElementById('outputSection');
+            
+            let html = '';
+            for (const [key, val] of Object.entries(secrets)) {
+                html += `
+                    <div class="secret-card">
+                        <div class="secret-header">
+                            <span class="secret-name">${key}</span>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <button class="copy-btn" onclick="copyText(this, '${key}')">
+                                    <svg class="icon" style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                                    名称
+                                </button>
+                                <button class="copy-btn" onclick="copyText(this, '${escapeHtml(val)}')">
+                                    <svg class="icon" style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                    值
+                                </button>
+                            </div>
+                        </div>
+                        <div class="secret-content">${escapeHtml(val)}</div>
+                    </div>
+                `;
+            }
+            container.innerHTML = html;
+            section.style.display = 'block';
+            section.scrollIntoView({ behavior: 'smooth' });
+            showToast('✅ 配置已生成，请复制到 GitHub Secrets');
+        }
+
+        function copyText(btn, text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const originalHtml = btn.innerHTML;
+                
+                // Visual feedback on button
+                btn.classList.add('copied');
+                btn.innerHTML = `
+                    <svg class="icon" style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    已复制
+                `;
+                
+                showToast('已复制到剪贴板');
+
+                setTimeout(() => {
+                    btn.classList.remove('copied');
+                    btn.innerHTML = originalHtml;
+                }, 2000);
+            });
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.querySelector('span').textContent = msg;
+            toast.classList.add('show');
+            
+            // Adjust icon based on success/error
+            const icon = toast.querySelector('svg');
+            if (msg.startsWith('❌')) {
+                icon.style.color = '#ef4444';
+                icon.innerHTML = '<circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line>';
+            } else {
+                icon.style.color = '#4ade80';
+                icon.innerHTML = '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>';
+            }
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        function escapeHtml(text) {
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
