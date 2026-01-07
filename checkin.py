@@ -8,7 +8,7 @@ import hashlib
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 import httpx
 from dotenv import load_dotenv
@@ -20,6 +20,11 @@ from utils.notify import notify
 load_dotenv()
 
 BALANCE_HASH_FILE = 'balance_hash.txt'
+
+
+def get_local_time_str() -> str:
+	"""获取本地时间字符串（格式：YYYY-MM-DD HH:MM:SS）"""
+	return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def load_balance_hash():
@@ -327,7 +332,7 @@ async def check_in_account(account: AccountConfig, account_index: int, app_confi
 async def main():
 	"""主函数"""
 	print('[SYSTEM] AnyRouter.top multi-account auto check-in script started (using Playwright)')
-	print(f'[TIME] Execution time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
+	print(f'[TIME] Execution time: {get_local_time_str()}')
 
 	app_config = AppConfig.load_from_env()
 	print(f'[INFO] Loaded {len(app_config.providers)} provider configuration(s)')
@@ -468,7 +473,7 @@ async def main():
 		else:
 			summary.append('[ERROR] All accounts check-in failed')
 
-		time_info = f'[TIME] Execution time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
+		time_info = f'[TIME] Execution time: {get_local_time_str()}'
 
 		notify_content = '\n\n'.join([time_info, '\n'.join(notification_content), '\n'.join(summary)])
 
