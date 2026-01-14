@@ -24,6 +24,8 @@ class NotificationKit:
 		self.gotify_priority = int(gotify_priority_env) if gotify_priority_env.strip() else 9
 		self.telegram_bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
 		self.telegram_chat_id = os.getenv('TELEGRAM_CHAT_ID')
+		self.bark_key = os.getenv('BARK_KEY')
+		self.bark_server = os.getenv('BARK_SERVER', 'https://api.day.app')
 
 	def send_email(self, title: str, content: str, msg_type: Literal['text', 'html'] = 'text'):
 		if not self.email_user or not self.email_pass or not self.email_to:
@@ -120,6 +122,24 @@ class NotificationKit:
 		with httpx.Client(timeout=30.0) as client:
 			client.post(url, json=data)
 
+	def send_bark(self, title: str, content: str):
+		if not self.bark_key:
+			raise ValueError('Bark Key not configured')
+
+		# Bark API 支持 GET/POST，这里使用 POST JSON 方式支持更多参数
+		# 文档: https://bark.day.app/#/tutorial
+		url = f'{self.bark_server.rstrip("/")}/push'
+		data = {
+			'device_key': self.bark_key,
+			'title': title,
+			'body': content,
+			'icon': 'https://anyrouter.top/favicon.ico',  # 可选：尝试使用 AnyRouter 图标
+			'group': 'AnyRouter'
+		}
+
+		with httpx.Client(timeout=30.0) as client:
+			client.post(url, json=data)
+
 	def push_message(self, title: str, content: str, msg_type: Literal['text', 'html'] = 'text'):
 		notifications = [
 			('Email', lambda: self.send_email(title, content, msg_type)),
@@ -130,6 +150,7 @@ class NotificationKit:
 			('WeChat Work', lambda: self.send_wecom(title, content)),
 			('Gotify', lambda: self.send_gotify(title, content)),
 			('Telegram', lambda: self.send_telegram(title, content)),
+			('Bark', lambda: self.send_bark(title, content)),
 		]
 
 		for name, func in notifications:
