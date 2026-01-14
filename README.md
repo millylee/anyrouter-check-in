@@ -24,10 +24,12 @@
 ### 2. 获取账号信息
 
 对于每个需要签到的账号，你需要获取：
+
 1. **Cookies**: 用于身份验证
 2. **API User**: 用于请求头的 new-api-user 参数（自己配置其它平台时该值需要注意匹配）
 
 #### 获取 Cookies：
+
 1. 打开浏览器，访问 https://anyrouter.top/
 2. 登录你的账户
 3. 打开开发者工具 (F12)
@@ -36,6 +38,7 @@
 6. 复制所有 cookies
 
 #### 获取 API User：
+
 按照下方图片教程操作获得。
 
 ### 3. 设置 GitHub Environment Secret
@@ -73,12 +76,14 @@
 ```
 
 **字段说明**：
+
 - `cookies` (必需)：用于身份验证的 cookies 数据
 - `api_user` (必需)：用于请求头的 new-api-user 参数
 - `provider` (可选)：指定使用的服务商，默认为 `anyrouter`
 - `name` (可选)：自定义账号显示名称，用于通知和日志中标识账号
 
 **默认值说明**：
+
 - 如果未提供 `provider` 字段，默认使用 `anyrouter`（向后兼容）
 - 如果未提供 `name` 字段，会使用 `Account 1`、`Account 2` 等默认名称
 - `anyrouter` 与 `agentrouter` 配置已内置，无需填写
@@ -112,7 +117,7 @@
 
 ## 执行时间
 
-- 脚本每6小时执行一次（1. action 无法准确触发，基本延时 1~1.5h；2. 目前观测到 anyrouter 的签到是每 24h 而不是零点就可签到）
+- 脚本每 6 小时执行一次（1. action 无法准确触发，基本延时 1~1.5h；2. 目前观测到 anyrouter 的签到是每 24h 而不是零点就可签到）
 - 你也可以随时手动触发签到
 
 ## 注意事项
@@ -206,6 +211,7 @@
 ```
 
 **关于 `bypass_method`**：
+
 - 不设置或设置为 `null`：直接使用用户提供的 cookies 进行请求（适合无 WAF 保护的网站）
 - 设置为 `"waf_cookies"`：使用 Playwright 打开浏览器获取 WAF cookies 后再进行请求（适合有 WAF 保护的网站）
 
@@ -219,6 +225,7 @@
    - Value: 你的 provider 配置（JSON 格式）
 
 **字段说明**：
+
 - `domain` (必需)：服务商的域名
 - `login_path` (可选)：登录页面路径，默认为 `/login`（仅在 `bypass_method` 为 `"waf_cookies"` 时使用）
 - `sign_in_path` (可选)：签到 API 路径，默认为 `/api/user/sign_in`
@@ -230,6 +237,7 @@
 - `waf_cookie_names` (可选)：绕过 WAF 所需 cookie 的名称列表，`bypass_method` 为 `waf_cookies` 时必须设置
 
 **配置示例**（完整）：
+
 ```json
 {
   "customrouter": {
@@ -244,6 +252,7 @@
 ```
 
 **内置配置说明**：
+
 - `anyrouter`：
   - `bypass_method: "waf_cookies"`（需要先获取 WAF cookies，然后执行签到）
   - `sign_in_path: "/api/user/sign_in"`
@@ -252,6 +261,7 @@
   - `sign_in_path: "/api/user/sign_in"`
 
 **重要提示**：
+
 - `PROVIDERS` 是可选的，不配置则使用内置的 `anyrouter` 和 `agentrouter`
 - 自定义的 provider 配置会覆盖同名的默认配置
 
@@ -260,36 +270,51 @@
 脚本支持多种通知方式，可以通过配置以下环境变量开启，如果 `webhook` 有要求安全设置，例如钉钉，可以在新建机器人时选择自定义关键词，填写 `AnyRouter`。
 
 ### 邮箱通知(STMP)
-- `EMAIL_USER`: 发件人邮箱地址/STMP登录地址
+
+- `EMAIL_USER`: 发件人邮箱地址/STMP 登录地址
 - `EMAIL_PASS`: 发件人邮箱密码/授权码
 - `EMAIL_SENDER`: 邮件显示的发件人地址(可选，默认: EMAIL_USER)
-- `CUSTOM_SMTP_SERVER`: 自定义发件人SMTP服务器(可选)
+- `CUSTOM_SMTP_SERVER`: 自定义发件人 SMTP 服务器(可选)
 - `EMAIL_TO`: 收件人邮箱地址
+
 ### 钉钉机器人
+
 - `DINGDING_WEBHOOK`: 钉钉机器人的 Webhook 地址
 
 ### 飞书机器人
+
 - `FEISHU_WEBHOOK`: 飞书机器人的 Webhook 地址
 
 ### 企业微信机器人
+
 - `WEIXIN_WEBHOOK`: 企业微信机器人的 Webhook 地址
 
 ### PushPlus 推送
+
 - `PUSHPLUS_TOKEN`: PushPlus 的 Token
 
-### Server酱
-- `SERVERPUSHKEY`: Server酱的 SendKey
+### Server 酱
+
+- `SERVERPUSHKEY`: Server 酱的 SendKey
 
 ### Telegram Bot
+
 - `TELEGRAM_BOT_TOKEN`: Telegram Bot 的 Token
 - `TELEGRAM_CHAT_ID`: Telegram Chat ID
 
 ### Gotify 推送
+
 - `GOTIFY_URL`: Gotify 服务的 URL 地址（例如: https://your-gotify-server/message）
 - `GOTIFY_TOKEN`: Gotify 应用的访问令牌
 - `GOTIFY_PRIORITY`: Gotify 消息优先级 (1-10, 默认为 9)
 
+### Bark 推送
+
+- `BARK_KEY`: Bark 应用的 Key（APP 打开时即可看到）
+- `BARK_SERVER`: 自建 Bark 服务器地址 (可选，默认: https://api.day.app)
+
 配置步骤：
+
 1. 在仓库的 Settings -> Environments -> production -> Environment secrets 中添加上述环境变量
 2. 每个通知方式都是独立的，可以只配置你需要的推送方式
 3. 如果某个通知方式配置不正确或未配置，脚本会自动跳过该通知方式
