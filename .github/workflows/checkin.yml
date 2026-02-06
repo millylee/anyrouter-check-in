@@ -91,7 +91,7 @@ jobs:
           BARK_KEY: ${{ secrets.BARK_KEY }}
           BARK_SERVER: ${{ secrets.BARK_SERVER }}
         run: |
-          uv run checkin.py
+          # uv run checkin.py
 
       - name: 执行结果
         if: always()
