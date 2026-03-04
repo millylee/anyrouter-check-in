@@ -96,3 +96,6 @@ environment.yml
 # MyPy
 .mypy_cache/
 node_modules
+get_user/
+package.json
+package-lock.json
