@@ -13,7 +13,7 @@
 
 **维护开源不易，如果本项目帮助到了你，请帮忙点个 Star，谢谢!**
 
-用于 Claude Code 中转站 Any Router 网站多账号每日签到，一次 $25，限时注册即送 100 美金，[点击这里注册](https://anyrouter.top/register?aff=gSsN)。业界良心，支持 Claude Sonnet 4.5、GPT-5-Codex、Claude Code 百万上下文（使用 `/model sonnet[1m]` 开启），`gemini-2.5-pro` 模型。
+用于 Claude Code 中转站 Any Router 网站多账号每日签到，一次 $25，限时注册即送 100 美金，【[anyrouter注册](https://anyrouter.top/register?aff=0W9A)】,【[agentrouter注册](https://agentrouter.org/register?aff=JDs6)】。业界良心，支持 Claude Sonnet 4.5、GPT-5-Codex、Claude Code 百万上下文（使用 `/model sonnet[1m]` 开启），`gemini-2.5-pro` 模型。
 
 ## 功能特性
 
@@ -64,22 +64,31 @@
 
 ```json
 [
-  {
-    "name": "我的主账号",
-    "cookies": {
-      "session": "account1_session_value"
+    {
+      "name": "anyrouter账号1",
+      "provider": "anyrouter.top",
+      "cookies": {
+        "session": "你的session值"
+      },
+      "api_user": "你的api_user值"
     },
-    "api_user": "account1_api_user_id"
-  },
-  {
-    "name": "备用账号",
-    "provider": "agentrouter",
-    "cookies": {
-      "session": "account2_session_value"
+    {
+      "name": "anyrouter账号2",
+      "provider": "anyrouter",
+      "cookies": {
+        "session": "你的session值"
+      },
+      "api_user": "你的api_user值"
     },
-    "api_user": "account2_api_user_id"
-  }
-]
+    {
+      "name": "agentrouter账号",
+      "provider": "agentrouter.org",
+      "cookies": {
+        "session": "你的session值"
+      },
+      "api_user": "你的api_user值"
+    }
+  ]
 ```
 
 **字段说明**：

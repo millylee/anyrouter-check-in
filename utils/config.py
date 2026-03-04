@@ -127,8 +127,39 @@ class AppConfig:
 		return cls(providers=providers)
 
 	def get_provider(self, name: str) -> ProviderConfig | None:
-		"""获取指定 provider 配置"""
-		return self.providers.get(name)
+		"""获取指定 provider 配置
+
+		支持以下格式匹配:
+		- 精确名称: "anyrouter", "agentrouter"
+		- 域名格式: "anyrouter.top", "agentrouter.org"
+		- 完整URL: "https://anyrouter.top"
+		"""
+		# 1. 精确匹配
+		provider = self.providers.get(name)
+		if provider:
+			return provider
+
+		# 2. 域名/URL 模糊匹配
+		normalized = name.lower().strip()
+		# 移除协议前缀
+		for prefix in ('https://', 'http://'):
+			if normalized.startswith(prefix):
+				normalized = normalized[len(prefix):]
+				break
+		# 移除尾部斜杠
+		normalized = normalized.rstrip('/')
+
+		for provider in self.providers.values():
+			domain = provider.domain.lower()
+			for prefix in ('https://', 'http://'):
+				if domain.startswith(prefix):
+					domain = domain[len(prefix):]
+					break
+			domain = domain.rstrip('/')
+			if domain == normalized:
+				return provider
+
+		return None
 
 
 @dataclass
