@@ -144,7 +144,7 @@ class AppConfig:
 		# 移除协议前缀
 		for prefix in ('https://', 'http://'):
 			if normalized.startswith(prefix):
-				normalized = normalized[len(prefix):]
+				normalized = normalized[len(prefix) :]
 				break
 		# 移除尾部斜杠
 		normalized = normalized.rstrip('/')
@@ -153,7 +153,7 @@ class AppConfig:
 			domain = provider.domain.lower()
 			for prefix in ('https://', 'http://'):
 				if domain.startswith(prefix):
-					domain = domain[len(prefix):]
+					domain = domain[len(prefix) :]
 					break
 			domain = domain.rstrip('/')
 			if domain == normalized:
