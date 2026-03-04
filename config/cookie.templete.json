@@ -1,0 +1,26 @@
+[
+  {
+    "name": "账号1",
+    "provider": "anyrouter.top",
+    "cookies": {
+      "session": "session值"
+    },
+    "api_user": "用户值"
+  },
+  {
+    "name": "账号2",
+    "provider": "anyrouter.top",
+    "cookies": {
+      "session": "session值"
+    },
+    "api_user": "用户值"
+  },
+  {
+    "name": "agentrouter账号",
+    "provider": "agentrouter.org",
+    "cookies": {
+      "session": "session值"
+    },
+    "api_user": "用户值"
+  }
+]

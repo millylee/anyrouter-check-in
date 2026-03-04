@@ -58,7 +58,25 @@
    - Name: `ANYROUTER_ACCOUNTS`
    - Value: 你的多账号配置数据
 
-### 4. 多账号配置格式
+### 4. 快速生成配置（推荐）
+
+项目提供了模板文件和转换脚本，可以快速生成 GitHub Secret 所需的单行 JSON：
+
+```bash
+# 1. 将模板文件重命名为 cookie.json
+cp config/cookie.templete.json config/cookie.json
+
+# 2. 编辑 cookie.json，填入你的账号信息（session、api_user 等）
+
+# 3. 运行转换脚本，输出单行 JSON
+python config/convert_cookie.py
+```
+
+脚本会将 `config/cookie.json` 的内容压缩为一行输出，直接复制粘贴到 GitHub Environment Secret 的 `ANYROUTER_ACCOUNTS` 值中即可。
+
+> 注：`config/cookie.json` 已被 `.gitignore` 忽略，不会被提交到仓库。
+
+### 5. 多账号配置格式
 
 支持单个与多个账号配置，可选 `name` 和 `provider` 字段：
 
@@ -114,14 +132,14 @@
 
 ![获取 api_user](./assets/request-api-user.png)
 
-### 5. 启用 GitHub Actions
+### 6. 启用 GitHub Actions
 
 1. 在你的仓库中，点击 "Actions" 选项卡
 2. 如果提示启用 Actions，请点击启用
 3. 找到 "AnyRouter 自动签到" workflow
 4. 点击 "Enable workflow"
 
-### 6. 测试运行
+### 7. 测试运行
 
 你可以手动触发一次签到来测试：
 

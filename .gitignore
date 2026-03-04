@@ -1,5 +1,6 @@
 .claude
 .env
+nul
 .venv
 __pycache__
 .pytest_cache
@@ -8,3 +9,90 @@ __pycache__
 balance_hash.txt
 
 .DS_Store
+cookie.json
+.venv
+.idea
+*.log
+.env
+gzip.zip
+*.jpg
+*.jepg
+*.png
+*.pdf
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+*.ico
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+*.txt
+
+# PyInstaller
+# 通常在构建可执行文件时生成
+# 可以删除，但最好保留以避免误提交
+# 除非确定不需要这些文件
+# __pycache__/
+# *.pyc
+# *.pyo
+# *.pyd
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environments
+venv/
+ENV/
+env/
+environment.yml
+.venvproject/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# MyPy
+.mypy_cache/
+node_modules
