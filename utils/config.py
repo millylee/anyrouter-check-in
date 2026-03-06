@@ -23,6 +23,8 @@ class ProviderConfig:
 	waf_cookie_names: List[str] | None = None
 
 	def __post_init__(self):
+		self.domain = self.domain.rstrip('/')
+
 		required_waf_cookies = set()
 		if self.waf_cookie_names and isinstance(self.waf_cookie_names, List):
 			for item in self.waf_cookie_names:
