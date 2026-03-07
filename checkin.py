@@ -65,28 +65,38 @@ def parse_cookies(cookies_data):
 	return {}
 
 
+PLAYWRIGHT_ARGS = [
+	'--disable-blink-features=AutomationControlled',
+	'--disable-dev-shm-usage',
+	'--disable-web-security',
+	'--disable-features=VizDisplayCompositor',
+	'--no-sandbox',
+]
+PLAYWRIGHT_UA = (
+	'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36'
+)
+
+
+async def _launch_browser_context(p, temp_dir: str):
+	"""启动浏览器上下文"""
+	return await p.chromium.launch_persistent_context(
+		user_data_dir=temp_dir,
+		headless=False,
+		user_agent=PLAYWRIGHT_UA,
+		viewport={'width': 1920, 'height': 1080},
+		args=PLAYWRIGHT_ARGS,
+	)
+
+
 async def get_waf_cookies_with_playwright(account_name: str, login_url: str, required_cookies: list[str]):
-	"""使用 Playwright 获取 WAF cookies（隐私模式）"""
+	"""使用 Playwright 获取 WAF cookies"""
 	print(f'[PROCESSING] {account_name}: Starting browser to get WAF cookies...')
 
 	async with async_playwright() as p:
 		import tempfile
 
 		with tempfile.TemporaryDirectory() as temp_dir:
-			context = await p.chromium.launch_persistent_context(
-				user_data_dir=temp_dir,
-				headless=False,
-				user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
-				viewport={'width': 1920, 'height': 1080},
-				args=[
-					'--disable-blink-features=AutomationControlled',
-					'--disable-dev-shm-usage',
-					'--disable-web-security',
-					'--disable-features=VizDisplayCompositor',
-					'--no-sandbox',
-				],
-			)
-
+			context = await _launch_browser_context(p, temp_dir)
 			page = await context.new_page()
 
 			try:
@@ -129,23 +139,89 @@ async def get_waf_cookies_with_playwright(account_name: str, login_url: str, req
 				return None
 
 
+async def fetch_via_playwright(
+	account_name: str, domain: str, user_cookies: dict, api_user_key: str, api_user: str, paths: list[tuple[str, str]]
+) -> dict | None:
+	"""使用 Playwright 浏览器内 fetch() 发起 API 请求，绕过 IP 封锁。
+	paths 为 (path, method) 元组列表，返回 {path: {status, body}} 字典，或 None。
+	"""
+	print(f'[PROCESSING] {account_name}: Starting browser for fetch bypass...')
+
+	async with async_playwright() as p:
+		import tempfile
+
+		with tempfile.TemporaryDirectory() as temp_dir:
+			context = await _launch_browser_context(p, temp_dir)
+			page = await context.new_page()
+
+			try:
+				# 设置 session cookie
+				cookie_domain = domain.replace('https://', '').replace('http://', '').rstrip('/')
+				await context.add_cookies(
+					[{'name': k, 'value': v, 'domain': cookie_domain, 'path': '/'} for k, v in user_cookies.items()]
+				)
+
+				# 先访问首页，让浏览器建立合法的上下文（CDN fingerprint）
+				await page.goto(domain, wait_until='domcontentloaded', timeout=20000)
+
+				results = {}
+				for path, method in paths:
+					url = f'{domain}{path}'
+					result = await page.evaluate(
+						"""async ([url, method, apiUserKey, apiUser]) => {
+							try {
+								const resp = await fetch(url, {
+									method: method,
+									headers: {
+										'Accept': 'application/json, text/plain, */*',
+										'Content-Type': 'application/json',
+										'X-Requested-With': 'XMLHttpRequest',
+										[apiUserKey]: apiUser,
+									},
+									credentials: 'include',
+								});
+								const text = await resp.text();
+								return { status: resp.status, body: text };
+							} catch (e) {
+								return { status: 0, body: e.toString() };
+							}
+						}""",
+						[url, method, api_user_key, api_user],
+					)
+					results[path] = result
+					print(f'[RESPONSE] {account_name}: Browser fetch {method} {path} -> HTTP {result["status"]}')
+
+				await context.close()
+				return results
+
+			except Exception as e:
+				print(f'[FAILED] {account_name}: Browser fetch error: {e}')
+				await context.close()
+				return None
+
+
+def _parse_user_info_data(data: dict) -> dict:
+	"""从 API 响应数据中解析用户信息"""
+	if data.get('success'):
+		user_data = data.get('data', {})
+		quota = round(user_data.get('quota', 0) / 500000, 2)
+		used_quota = round(user_data.get('used_quota', 0) / 500000, 2)
+		return {
+			'success': True,
+			'quota': quota,
+			'used_quota': used_quota,
+			'display': f':money: Current balance: ${quota}, Used: ${used_quota}',
+		}
+	return {'success': False, 'error': 'API returned success=false'}
+
+
 def get_user_info(client, headers, user_info_url: str):
 	"""获取用户信息"""
 	try:
 		response = client.get(user_info_url, headers=headers, timeout=30)
 
 		if response.status_code == 200:
-			data = response.json()
-			if data.get('success'):
-				user_data = data.get('data', {})
-				quota = round(user_data.get('quota', 0) / 500000, 2)
-				used_quota = round(user_data.get('used_quota', 0) / 500000, 2)
-				return {
-					'success': True,
-					'quota': quota,
-					'used_quota': used_quota,
-					'display': f':money: Current balance: ${quota}, Used: ${used_quota}',
-				}
+			return _parse_user_info_data(response.json())
 		return {'success': False, 'error': f'Failed to get user info: HTTP {response.status_code}'}
 	except Exception as e:
 		return {'success': False, 'error': f'Failed to get user info: {str(e)[:50]}...'}
@@ -299,7 +375,7 @@ async def check_in_account(account: AccountConfig, account_index: int, app_confi
 		client.cookies.update(all_cookies)
 
 		headers = {
-			'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
+			'User-Agent': PLAYWRIGHT_UA,
 			'Accept': 'application/json, text/plain, */*',
 			'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
 			'Accept-Encoding': 'gzip, deflate, br, zstd',
@@ -319,14 +395,24 @@ async def check_in_account(account: AccountConfig, account_index: int, app_confi
 		elif user_info_before:
 			print(user_info_before.get('error', 'Unknown error'))
 
+		# 检测到 401，说明此 IP 被目标服务器拒绝，改用 Playwright 浏览器发请求
+		if not user_info_before or not user_info_before.get('success'):
+			error_msg = (user_info_before or {}).get('error', '')
+			if 'HTTP 401' in error_msg:
+				print(f'[INFO] {account_name}: httpx got 401, falling back to browser fetch to bypass IP block')
+				return await _check_in_via_browser(account_name, provider_config, user_cookies, account.api_user)
+
 		if provider_config.needs_manual_check_in():
 			success = execute_check_in(client, account_name, provider_config, headers)
-			# 签到后再次获取用户信息，用于计算签到收益
+			# 签到后再次获取用户信息
 			user_info_after = get_user_info(client, headers, user_info_url)
+			# 签到请求也被 IP 封锁
+			if not success and not (user_info_after and user_info_after.get('success')):
+				print(f'[INFO] {account_name}: Check-in failed with IP block, falling back to browser fetch')
+				return await _check_in_via_browser(account_name, provider_config, user_cookies, account.api_user)
 			return success, user_info_before, user_info_after
 		else:
 			print(f'[INFO] {account_name}: Check-in completed automatically (triggered by user info request)')
-			# 自动签到的情况，再次获取用户信息
 			user_info_after = get_user_info(client, headers, user_info_url)
 			return True, user_info_before, user_info_after
 
@@ -335,6 +421,105 @@ async def check_in_account(account: AccountConfig, account_index: int, app_confi
 		return False, None, None
 	finally:
 		client.close()
+
+
+async def _check_in_via_browser(account_name: str, provider_config, user_cookies: dict, api_user: str):
+	"""通过 Playwright 浏览器 fetch 完成签到（用于绕过 IP 封锁）"""
+	sign_in_path = provider_config.sign_in_path or NEW_API_CHECKIN_PATH
+	user_info_path = provider_config.user_info_path
+
+	# 第一步：获取签到前信息 + 执行签到
+	results = await fetch_via_playwright(
+		account_name,
+		provider_config.domain,
+		user_cookies,
+		provider_config.api_user_key,
+		api_user,
+		paths=[(user_info_path, 'GET'), (sign_in_path, 'POST')],
+	)
+
+	if not results:
+		return False, None, None
+
+	# 解析签到前的用户信息
+	user_info_before = _parse_browser_fetch_user_info(account_name, results.get(user_info_path))
+	if user_info_before and user_info_before.get('success'):
+		print(user_info_before['display'])
+
+	# 解析签到结果
+	checkin_result = results.get(sign_in_path, {})
+	checkin_status = checkin_result.get('status', 0)
+	checkin_body = checkin_result.get('body', '')
+
+	# 如果签到路径 404，尝试 new-api 路径
+	if checkin_status == 404 and sign_in_path != NEW_API_CHECKIN_PATH:
+		print(f'[INFO] {account_name}: Browser sign_in returned 404, trying new-api checkin endpoint')
+		fallback_results = await fetch_via_playwright(
+			account_name,
+			provider_config.domain,
+			user_cookies,
+			provider_config.api_user_key,
+			api_user,
+			paths=[(NEW_API_CHECKIN_PATH, 'POST')],
+		)
+		if fallback_results:
+			checkin_result = fallback_results.get(NEW_API_CHECKIN_PATH, {})
+			checkin_status = checkin_result.get('status', 0)
+			checkin_body = checkin_result.get('body', '')
+
+	success = _parse_browser_checkin_result(account_name, checkin_status, checkin_body)
+
+	# 第二步：获取签到后信息
+	after_results = await fetch_via_playwright(
+		account_name,
+		provider_config.domain,
+		user_cookies,
+		provider_config.api_user_key,
+		api_user,
+		paths=[(user_info_path, 'GET')],
+	)
+	user_info_after = None
+	if after_results:
+		user_info_after = _parse_browser_fetch_user_info(account_name, after_results.get(user_info_path))
+
+	return success, user_info_before, user_info_after
+
+
+def _parse_browser_fetch_user_info(account_name: str, fetch_result: dict | None) -> dict:
+	"""解析浏览器 fetch 获取的用户信息"""
+	if not fetch_result:
+		return {'success': False, 'error': 'No response from browser fetch'}
+	status = fetch_result.get('status', 0)
+	body = fetch_result.get('body', '')
+	if status == 200:
+		try:
+			return _parse_user_info_data(json.loads(body))
+		except Exception:
+			pass
+	return {'success': False, 'error': f'Failed to get user info: HTTP {status}'}
+
+
+def _parse_browser_checkin_result(account_name: str, status: int, body: str) -> bool:
+	"""解析浏览器 fetch 签到结果"""
+	if status == 200:
+		try:
+			result = json.loads(body)
+			if result.get('ret') == 1 or result.get('code') == 0 or result.get('success'):
+				print(f'[SUCCESS] {account_name}: Check-in successful! (browser fetch)')
+				return True
+			error_msg = result.get('msg', result.get('message', 'Unknown error'))
+			already_checked_keywords = ['已经签到', '已签到', '重复签到', 'already checked', 'already signed']
+			if any(keyword in error_msg.lower() for keyword in already_checked_keywords):
+				print(f'[SUCCESS] {account_name}: Already checked in today (browser fetch)')
+				return True
+			print(f'[FAILED] {account_name}: Check-in failed - {error_msg}')
+			return False
+		except json.JSONDecodeError:
+			if 'success' in body.lower():
+				print(f'[SUCCESS] {account_name}: Check-in successful! (browser fetch)')
+				return True
+	print(f'[FAILED] {account_name}: Check-in failed - HTTP {status} (browser fetch)')
+	return False
 
 
 async def main():
