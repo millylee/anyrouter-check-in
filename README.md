@@ -500,15 +500,11 @@ uv run pytest tests/ --cov=.
 ```json
 [
   {
-    "domain": "https://anyrouter.top",
-    "api_user": "123456",
-    "env_key_suffix": "123456"
+    "domain": "https://anyrouter.top"
   },
   {
     "domain": "https://agentrouter.org",
-    "api_user": "789012",
-    "env_key_suffix": "789012_AGENTROUTER",
-    "cookie_name": "session"
+    "env_key_suffix": "789012_AGENTROUTER"
   }
 ]
 ```
@@ -516,8 +512,8 @@ uv run pytest tests/ --cov=.
 **字段说明**：
 
 - `domain`（必需）：站点域名，用于从浏览器中提取 cookie
-- `api_user`（可选）：API 用户 ID，会写入 secret JSON 中
-- `env_key_suffix`（推荐）：secret 名称后缀，生成 `ANYROUTER_ACCOUNT_{suffix}`
+- `api_user`（可选）：API 用户 ID，不填时自动调用 `/api/user/self` 接口获取
+- `env_key_suffix`（可选）：secret 名称后缀，生成 `ANYROUTER_ACCOUNT_{suffix}`；不填则使用 `api_user` 值
 - `cookie_name`（可选）：要提取的 cookie 名称，默认为 `session`
 
 ### 前提条件

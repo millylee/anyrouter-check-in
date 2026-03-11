@@ -78,19 +78,18 @@
       <label for="accounts">账号列表 (JSON 数组)</label>
       <textarea id="accounts" placeholder='[
   {
-    "domain": "https://anyrouter.top",
-    "api_user": "123456",
-    "env_key_suffix": "123456"
+    "domain": "https://anyrouter.top"
   },
   {
     "domain": "https://agentrouter.org",
-    "api_user": "789012",
     "env_key_suffix": "789012_AGENTROUTER"
   }
 ]'></textarea>
       <div class="hint">
-        domain: 站点地址 | api_user: 用户ID | env_key_suffix: secret 后缀（生成 ANYROUTER_ACCOUNT_{suffix}）<br>
-        cookie_name: 可选，默认 "session"
+        domain（必填）: 站点地址<br>
+        api_user（可选）: 不填则自动从 /api/user/self 获取<br>
+        env_key_suffix（可选）: secret 后缀，默认用 api_user（生成 ANYROUTER_ACCOUNT_{suffix}）<br>
+        cookie_name（可选）: 默认 "session"
       </div>
     </div>
   </div>

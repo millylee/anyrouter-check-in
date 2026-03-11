@@ -93,10 +93,33 @@ async function syncAllAccounts() {
   return { success: okCount > 0, summary, results };
 }
 
+async function fetchApiUser(domain, cookieName, cookieValue) {
+  // Attempt to resolve api_user by calling /api/user/self with the session cookie.
+  // Returns the string user id, or null if unavailable.
+  try {
+    const url = `${domain.replace(/\/$/, '')}/api/user/self`;
+    const resp = await fetch(url, {
+      headers: {
+        'Cookie': `${cookieName}=${cookieValue}`,
+        'Accept': 'application/json'
+      },
+      credentials: 'omit'
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    // Both new-api and one-api return data.data.id or data.id
+    const id = data?.data?.id ?? data?.id ?? null;
+    return id != null ? String(id) : null;
+  } catch {
+    return null;
+  }
+}
+
 async function syncOneAccount(config, account) {
-  const { domain, api_user, env_key_suffix, cookie_name } = account;
-  const label = env_key_suffix || api_user || domain;
+  const { domain, cookie_name } = account;
+  let { api_user, env_key_suffix } = account;
   const targetCookieName = cookie_name || 'session';
+  const label = env_key_suffix || api_user || domain;
 
   try {
     await Logger.info(`Extracting cookie "${targetCookieName}" for ${label}`, { domain });
@@ -114,7 +137,25 @@ async function syncOneAccount(config, account) {
 
     await Logger.success(`Cookie extracted for ${label}`, { length: cookie.value.length });
 
-    const secretName = `ANYROUTER_ACCOUNT_${env_key_suffix || api_user}`;
+    // Auto-resolve api_user if not provided
+    if (!api_user) {
+      await Logger.info(`api_user not set for ${label}, fetching from /api/user/self...`);
+      api_user = await fetchApiUser(domain, targetCookieName, cookie.value);
+      if (api_user) {
+        await Logger.success(`Auto-resolved api_user: ${api_user}`);
+      } else {
+        await Logger.info(`Could not auto-resolve api_user, secret will omit api_user field`);
+      }
+    }
+
+    // Determine secret name: env_key_suffix > api_user > error
+    const secretSuffix = env_key_suffix || api_user;
+    if (!secretSuffix) {
+      await Logger.error(`Cannot determine secret name for ${label}: no env_key_suffix or api_user`);
+      return { success: false, label, error: 'cannot determine secret name (no env_key_suffix or api_user)' };
+    }
+
+    const secretName = `ANYROUTER_ACCOUNT_${secretSuffix}`;
     const secretValue = JSON.stringify({
       cookies: { [targetCookieName]: cookie.value },
       ...(api_user ? { api_user } : {})
