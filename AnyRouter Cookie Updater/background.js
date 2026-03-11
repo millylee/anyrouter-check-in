@@ -115,6 +115,16 @@ async function fetchApiUser(domain, cookieName, cookieValue) {
   }
 }
 
+// Reverse map: domain → provider name, for auto-generating env_key_suffix
+const DOMAIN_TO_PROVIDER = {
+  'https://anyrouter.top':       'ANYROUTER',
+  'https://agentrouter.org':     'AGENTROUTER',
+  'https://api.freestyle.cc.cd': 'FREESTYLE',
+  'https://ai.xingyungept.cn':   'XINGYUNGEPT',
+  'https://newapi.sorai.me':     'SORAI',
+  'https://welfare.apikey.cc':   'APIKEY',
+};
+
 async function syncOneAccount(config, account) {
   const { domain, cookie_name } = account;
   let { api_user, env_key_suffix } = account;
@@ -125,7 +135,6 @@ async function syncOneAccount(config, account) {
     let cookieValue = account._imported_session || null;
 
     if (cookieValue) {
-      // Use the pre-imported cookie value directly (from ANYROUTER_ACCOUNTS import)
       await Logger.info(`Using imported cookie for ${label}`, { source: 'import' });
     } else {
       await Logger.info(`Extracting cookie "${targetCookieName}" for ${label}`, { domain });
@@ -152,18 +161,24 @@ async function syncOneAccount(config, account) {
       if (api_user) {
         await Logger.success(`Auto-resolved api_user: ${api_user}`);
       } else {
-        await Logger.info(`Could not auto-resolve api_user, secret will omit api_user field`);
+        await Logger.info(`Could not auto-resolve api_user`);
       }
     }
 
-    // Determine secret name: env_key_suffix > api_user > error
-    const secretSuffix = env_key_suffix || api_user;
-    if (!secretSuffix) {
-      await Logger.error(`Cannot determine secret name for ${label}: no env_key_suffix or api_user`);
-      return { success: false, label, error: 'cannot determine secret name (no env_key_suffix or api_user)' };
+    // Determine secret suffix: always use {api_user}_{PROVIDER} format to avoid
+    // cross-platform ID collisions (same numeric ID can exist on different platforms).
+    // env_key_suffix takes priority if explicitly set (e.g. for custom/unknown providers).
+    if (!env_key_suffix) {
+      if (!api_user) {
+        await Logger.error(`Cannot determine secret name for ${label}: no env_key_suffix and api_user unavailable`);
+        return { success: false, label, error: 'cannot determine secret name (no env_key_suffix, api_user unavailable)' };
+      }
+      const providerTag = DOMAIN_TO_PROVIDER[domain.replace(/\/$/, '')] || 'UNKNOWN';
+      env_key_suffix = `${api_user}_${providerTag}`;
+      await Logger.info(`Auto-generated env_key_suffix: ${env_key_suffix}`);
     }
 
-    const secretName = `ANYROUTER_ACCOUNT_${secretSuffix}`;
+    const secretName = `ANYROUTER_ACCOUNT_${env_key_suffix}`;
     const secretValue = JSON.stringify({
       cookies: { [targetCookieName]: cookieValue },
       ...(api_user ? { api_user } : {})

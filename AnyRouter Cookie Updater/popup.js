@@ -290,7 +290,9 @@ function openImportDialog() {
 /**
  * Convert ANYROUTER_ACCOUNTS format to plugin format.
  * Input:  [{cookies:{session:"..."}, api_user:"xxx", provider:"anyrouter"}, ...]
- * Output: [{domain:"https://...", api_user:"xxx"}, ...]
+ * Output: [{domain:"https://...", api_user:"xxx", env_key_suffix:"xxx_ANYROUTER"}, ...]
+ *
+ * Secret naming: always {api_user}_{PROVIDER} to avoid cross-platform ID collisions.
  */
 function convertFromAnyRouterAccounts(items) {
   return items.map(item => {
@@ -302,12 +304,10 @@ function convertFromAnyRouterAccounts(items) {
     if (!domain) return null;
 
     const entry = { domain };
-    if (item.api_user) entry.api_user = String(item.api_user);
-    // env_key_suffix: provider_apiuser for non-default providers, just apiuser for anyrouter
     if (item.api_user) {
-      entry.env_key_suffix = provider !== 'anyrouter'
-        ? `${item.api_user}_${provider.toUpperCase()}`
-        : String(item.api_user);
+      entry.api_user = String(item.api_user);
+      // Always use {api_user}_{PROVIDER} — IDs are per-platform and can collide across providers
+      entry.env_key_suffix = `${item.api_user}_${provider.toUpperCase()}`;
     }
     // Store the actual session value so background.js can use it directly
     // (no need to re-extract from browser if we already have it)

@@ -298,16 +298,22 @@
         log.info(`Fetching api_user from /api/user/self for ${label}`);
         api_user = await fetchApiUser(domain, targetCookieName, cookieValue);
         if (api_user) log.success(`Auto-resolved api_user: ${api_user}`);
-        else log.info(`api_user not resolved, will omit from secret`);
+        else log.info(`api_user not resolved`);
       }
 
-      const secretSuffix = env_key_suffix || api_user;
-      if (!secretSuffix) {
-        log.error(`Cannot determine secret name for ${label}`);
-        return { success: false, label, error: 'no env_key_suffix or api_user' };
+      // Always use {api_user}_{PROVIDER} format to avoid cross-platform ID collisions.
+      // env_key_suffix takes priority only if explicitly set (e.g. for custom providers).
+      if (!env_key_suffix) {
+        if (!api_user) {
+          log.error(`Cannot determine secret name for ${label}: no env_key_suffix and api_user unavailable`);
+          return { success: false, label, error: 'no env_key_suffix, api_user unavailable' };
+        }
+        const providerTag = DOMAIN_TO_PROVIDER[domain.replace(/\/$/, '')] || 'UNKNOWN';
+        env_key_suffix = `${api_user}_${providerTag}`;
+        log.info(`Auto-generated env_key_suffix: ${env_key_suffix}`);
       }
 
-      const secretName = `ANYROUTER_ACCOUNT_${secretSuffix}`;
+      const secretName = `ANYROUTER_ACCOUNT_${env_key_suffix}`;
       const secretValue = JSON.stringify({
         cookies: { [targetCookieName]: cookieValue },
         ...(api_user ? { api_user } : {})
@@ -342,6 +348,16 @@
     apikey:      'https://welfare.apikey.cc',
   };
 
+  // Reverse map: domain → PROVIDER tag for secret naming
+  const DOMAIN_TO_PROVIDER = {
+    'https://anyrouter.top':       'ANYROUTER',
+    'https://agentrouter.org':     'AGENTROUTER',
+    'https://api.freestyle.cc.cd': 'FREESTYLE',
+    'https://ai.xingyungept.cn':   'XINGYUNGEPT',
+    'https://newapi.sorai.me':     'SORAI',
+    'https://welfare.apikey.cc':   'APIKEY',
+  };
+
   function convertFromAnyRouterAccounts(items) {
     return items.map(item => {
       const sessionCookie = item?.cookies?.session;
@@ -352,9 +368,8 @@
       const entry = { domain };
       if (item.api_user) {
         entry.api_user = String(item.api_user);
-        entry.env_key_suffix = provider !== 'anyrouter'
-          ? `${item.api_user}_${provider.toUpperCase()}`
-          : String(item.api_user);
+        // Always use {api_user}_{PROVIDER} — IDs are per-platform and can collide across providers
+        entry.env_key_suffix = `${item.api_user}_${provider.toUpperCase()}`;
       }
       entry._imported_session = sessionCookie;
       return entry;

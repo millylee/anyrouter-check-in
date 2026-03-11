@@ -215,13 +215,34 @@
 
 参考 [autocheck-anyrouter](https://github.com/rakuyoMo/autocheck-anyrouter) 方案，支持通过 `ANYROUTER_ACCOUNT_*` 前缀的环境变量独立管理每个账号。
 
+### Secret 命名规范
+
+Secret 名称格式统一为：
+
+```
+ANYROUTER_ACCOUNT_{api_user}_{PROVIDER}
+```
+
+示例：
+
+```
+ANYROUTER_ACCOUNT_123456_ANYROUTER
+ANYROUTER_ACCOUNT_789012_AGENTROUTER
+ANYROUTER_ACCOUNT_111111_FREESTYLE
+ANYROUTER_ACCOUNT_222222_XINGYUNGEPT
+ANYROUTER_ACCOUNT_333333_APIKEY
+```
+
+> **为什么不能只用 api_user？**  
+> `api_user` 是各平台内部的自增数字 ID，不同平台间完全独立，相同数字完全可能出现在多个平台（例如平台 A 的用户 111111 和平台 B 的用户 111111 是两个不同的人）。必须加上平台标识才能唯一确定一个账号。
+
 ### 用法
 
 在 GitHub Environment Secrets 中添加以 `ANYROUTER_ACCOUNT_` 为前缀的 secret，每个 secret 包含一个账号的 JSON 配置：
 
 ```
-ANYROUTER_ACCOUNT_123456 = {"cookies": {"session": "new_session_value"}}
-ANYROUTER_ACCOUNT_789012_AGENTROUTER = {"cookies": {"session": "another_session"}, "api_user": "789012", "provider": "agentrouter"}
+ANYROUTER_ACCOUNT_123456_ANYROUTER   = {"cookies": {"session": "new_session_value"}}
+ANYROUTER_ACCOUNT_789012_AGENTROUTER  = {"cookies": {"session": "another_session"}, "api_user": "789012", "provider": "agentrouter"}
 ```
 
 ### 合并规则
@@ -233,7 +254,7 @@ ANYROUTER_ACCOUNT_789012_AGENTROUTER = {"cookies": {"session": "another_session"
 ### 适用场景
 
 - 某个账号 cookie 过期时，只需更新对应的 `ANYROUTER_ACCOUNT_*` secret，无需修改整个 `ANYROUTER_ACCOUNTS`
-- 搭配 Chrome 插件自动推送 cookie（见下文）
+- 搭配 Chrome 插件 / Tampermonkey 脚本自动推送 cookie（见下文）
 
 ## 自定义 Provider 配置（可选）
 
@@ -500,21 +521,36 @@ uv run pytest tests/ --cov=.
 ```json
 [
   {
-    "domain": "https://anyrouter.top"
+    "domain": "https://anyrouter.top",
+    "api_user": "123456",
+    "env_key_suffix": "123456_ANYROUTER"
   },
   {
     "domain": "https://agentrouter.org",
+    "api_user": "789012",
     "env_key_suffix": "789012_AGENTROUTER"
   }
 ]
 ```
 
+若不填写 `api_user` 和 `env_key_suffix`，扩展会自动调用 `/api/user/self` 解析 `api_user`，并以 `{api_user}_{PROVIDER}` 格式自动生成 `env_key_suffix`。也可使用"📥 导入"按钮直接粘贴 `ANYROUTER_ACCOUNTS` 的 JSON 内容批量导入（见下文）。
+
 **字段说明**：
 
 - `domain`（必需）：站点域名，用于从浏览器中提取 cookie
 - `api_user`（可选）：API 用户 ID，不填时自动调用 `/api/user/self` 接口获取
-- `env_key_suffix`（可选）：secret 名称后缀，生成 `ANYROUTER_ACCOUNT_{suffix}`；不填则使用 `api_user` 值
+- `env_key_suffix`（可选）：secret 名称后缀，生成 `ANYROUTER_ACCOUNT_{suffix}`；不填则自动生成为 `{api_user}_{PROVIDER}`（如 `123456_ANYROUTER`）
 - `cookie_name`（可选）：要提取的 cookie 名称，默认为 `session`
+
+### 从 ANYROUTER_ACCOUNTS 一键导入
+
+点击弹窗底部的"📥 导入"按钮，粘贴 GitHub Secrets 中 `ANYROUTER_ACCOUNTS` 的 JSON 内容（支持多行），扩展会自动：
+
+1. 解析 `cookies.session` + `api_user` + `provider` 字段
+2. 通过内置域名映射找到对应 `domain`
+3. 生成统一格式的 `env_key_suffix`（`{api_user}_{PROVIDER}`）
+
+支持"导入并覆盖"和"导入并合并（去重）"两种模式。
 
 ### 前提条件
 
@@ -600,10 +636,19 @@ Tampermonkey 会自动识别并弹出安装确认页面。
 
 ### 2026-03-11
 
-#### v1.2 - Tampermonkey 脚本
+#### v1.3 - Secret 命名规范统一
+
+- **统一 Secret 命名格式为 `{api_user}_{PROVIDER}`**：`api_user` 是各平台内部自增 ID，不同平台间可能重复（如平台 A 和平台 B 都有 ID 为 111111 的用户），因此不能单独用 `api_user` 作为 secret 后缀，必须加上平台标识才能唯一区分
+- Chrome 插件和 Tampermonkey 脚本：导入 ANYROUTER_ACCOUNTS 时所有账号（包括 anyrouter 本身）统一生成 `{api_user}_{PROVIDER}` 格式的 `env_key_suffix`
+- `background.js` / Tampermonkey `syncOneAccount`：手动配置账号时，若未填写 `env_key_suffix`，在 `api_user` 自动解析成功后自动生成 `{api_user}_{PROVIDER}` 后缀，不再 fallback 为纯 `api_user`
+- README 更新 Secret 命名规范说明，删除混用两种格式的示例
+
+#### v1.2 - Tampermonkey 脚本 + 导入功能
 
 - **Tampermonkey 油猴脚本**：新增 `anyrouter-cookie-updater.user.js`，功能与 Chrome 扩展对等，支持所有主流浏览器，通过 `GM_cookie` 读取 cookie，通过 `GM_xmlhttpRequest` 跨域调用 GitHub API，通过 `GM_registerMenuCommand` 注册油猴菜单命令，内置同款设置面板（列表/JSON 双模式）和日志查看器
 - 自动同步支持基于页面加载的间隔检查（`GM_setValue` 记录上次同步时间）
+- **从 ANYROUTER_ACCOUNTS 一键导入**：Chrome 扩展和 Tampermonkey 脚本均新增"📥 导入"按钮，粘贴原有 `ANYROUTER_ACCOUNTS` JSON（支持多行）即可批量转换导入，支持覆盖或合并去重两种模式
+- **UI 优化**：`cookie_name` 字段预填 `session`；JSON 模式空 textarea 不再报错可直接切换；日志按钮改为紫色，导入按钮为橙色，颜色层次更清晰
 
 #### v1.1 - Chrome 扩展体验优化
 
