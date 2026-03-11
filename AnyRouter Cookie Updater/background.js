@@ -134,13 +134,19 @@ async function syncOneAccount(config, account) {
   try {
     await Logger.info(`Extracting cookie "${targetCookieName}" for ${label}`, { domain });
 
-    const url = domain.replace(/\/$/, '');
-    const cookies = await chrome.cookies.getAll({ url });
-    const cookie = cookies.find(c => c.name === targetCookieName);
+    // Query by domain (hostname only) so the Service Worker gets all cookies
+    // regardless of Secure/SameSite/httpOnly flags.  Using {url} in a SW
+    // context returns an empty array because the SW is not the origin page.
+    const hostname = new URL(domain).hostname;
+    const cookies = await chrome.cookies.getAll({ domain: hostname, name: targetCookieName });
+    const cookie = cookies[0] ?? null;
 
     if (!cookie) {
+      // Also list all cookie names for this domain to aid debugging
+      const allCookies = await chrome.cookies.getAll({ domain: hostname });
       await Logger.error(`Cookie "${targetCookieName}" not found for ${label}`, {
-        available: cookies.map(c => c.name)
+        domain,
+        available: allCookies.map(c => c.name)
       });
       return { success: false, label, error: `cookie "${targetCookieName}" not found` };
     }
