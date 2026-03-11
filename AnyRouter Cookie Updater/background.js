@@ -127,42 +127,33 @@ const DOMAIN_TO_PROVIDER = {
 
 async function syncOneAccount(config, account) {
   const { domain, cookie_name } = account;
-  let { api_user, env_key_suffix } = account;
+  let { env_key_suffix } = account;
   const targetCookieName = cookie_name || 'session';
-  const label = env_key_suffix || api_user || domain;
+  const label = env_key_suffix || domain;
 
   try {
-    let cookieValue = account._imported_session || null;
+    await Logger.info(`Extracting cookie "${targetCookieName}" for ${label}`, { domain });
 
-    if (cookieValue) {
-      await Logger.info(`Using imported cookie for ${label}`, { source: 'import' });
-    } else {
-      await Logger.info(`Extracting cookie "${targetCookieName}" for ${label}`, { domain });
+    const url = domain.replace(/\/$/, '');
+    const cookies = await chrome.cookies.getAll({ url });
+    const cookie = cookies.find(c => c.name === targetCookieName);
 
-      const url = domain.replace(/\/$/, '');
-      const cookies = await chrome.cookies.getAll({ url });
-      const cookie = cookies.find(c => c.name === targetCookieName);
-
-      if (!cookie) {
-        await Logger.error(`Cookie "${targetCookieName}" not found for ${label}`, {
-          available: cookies.map(c => c.name)
-        });
-        return { success: false, label, error: `cookie "${targetCookieName}" not found` };
-      }
-
-      cookieValue = cookie.value;
-      await Logger.success(`Cookie extracted for ${label}`, { length: cookieValue.length });
+    if (!cookie) {
+      await Logger.error(`Cookie "${targetCookieName}" not found for ${label}`, {
+        available: cookies.map(c => c.name)
+      });
+      return { success: false, label, error: `cookie "${targetCookieName}" not found` };
     }
 
-    // Auto-resolve api_user if not provided
-    if (!api_user) {
-      await Logger.info(`api_user not set for ${label}, fetching from /api/user/self...`);
-      api_user = await fetchApiUser(domain, targetCookieName, cookieValue);
-      if (api_user) {
-        await Logger.success(`Auto-resolved api_user: ${api_user}`);
-      } else {
-        await Logger.info(`Could not auto-resolve api_user`);
-      }
+    const cookieValue = cookie.value;
+    await Logger.success(`Cookie extracted for ${label}`, { length: cookieValue.length });
+
+    await Logger.info(`Fetching api_user from /api/user/self for ${label}...`);
+    const api_user = await fetchApiUser(domain, targetCookieName, cookieValue);
+    if (api_user) {
+      await Logger.success(`Resolved api_user: ${api_user}`);
+    } else {
+      await Logger.error(`Could not resolve api_user for ${label}`);
     }
 
     // Determine secret suffix: always use {api_user}_{PROVIDER} format to avoid

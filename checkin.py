@@ -224,14 +224,7 @@ def execute_check_in(client, account_name: str, provider_config, headers: dict):
 
 
 def format_check_in_notification(detail: dict) -> str:
-	"""格式化签到通知消息
-
-	Args:
-		detail: 包含签到详情的字典
-
-	Returns:
-		格式化后的通知消息
-	"""
+	"""格式化签到通知消息"""
 	provider_info = ''
 	if detail.get('provider_name') or detail.get('provider_domain'):
 		pname = detail.get('provider_name', '')
@@ -244,41 +237,50 @@ def format_check_in_notification(detail: dict) -> str:
 	]
 	if provider_info:
 		lines.append(provider_info.rstrip('\n'))
-	lines.extend(
-		[
+
+	before_quota = detail.get('before_quota')
+	before_used = detail.get('before_used')
+	after_quota = detail.get('after_quota')
+	after_used = detail.get('after_used')
+	error_message = detail.get('error_message')
+	success = detail.get('success', False)
+
+	if before_quota is not None and before_used is not None:
+		lines.extend([
 			'  📍 签到前',
-			f'     💵 余额: ${detail["before_quota"]:.2f}  |  📊 累计消耗: ${detail["before_used"]:.2f}',
+			f'     💵 余额: ${before_quota:.2f}  |  📊 累计消耗: ${before_used:.2f}',
+		])
+	if after_quota is not None and after_used is not None:
+		lines.extend([
 			'  📍 签到后',
-			f'     💵 余额: ${detail["after_quota"]:.2f}  |  📊 累计消耗: ${detail["after_used"]:.2f}',
-		]
-	)
+			f'     💵 余额: ${after_quota:.2f}  |  📊 累计消耗: ${after_used:.2f}',
+		])
+
+	if not success:
+		lines.append('  ━━━━━━━━━━━━━━━━━━━━')
+		lines.append('  ❌ 签到失败')
+		if error_message:
+			lines.append(f'  ⚠️ 错误信息: {error_message}')
+		return '\n'.join(lines)
 
 	# 判断是否有变化
-	has_reward = detail['check_in_reward'] != 0
-	has_usage = detail['usage_increase'] != 0
+	has_reward = detail.get('check_in_reward', 0) != 0
+	has_usage = detail.get('usage_increase', 0) != 0
 
 	if has_reward or has_usage:
 		lines.append('  ━━━━━━━━━━━━━━━━━━━━')
 
-		# 已签到但期间有使用
 		if not has_reward and has_usage:
 			lines.append('  ℹ️  今日已签到（期间有使用）')
-
-		# 签到获得
 		if has_reward:
 			lines.append(f'  🎁 签到获得: +${detail["check_in_reward"]:.2f}')
-
-		# 期间消耗
 		if has_usage:
 			lines.append(f'  📉 期间消耗: ${detail["usage_increase"]:.2f}')
-
-		# 余额变化
-		if detail['balance_change'] != 0:
+		if detail.get('balance_change', 0) != 0:
 			change_symbol = '+' if detail['balance_change'] > 0 else ''
 			change_emoji = '📈' if detail['balance_change'] > 0 else '📉'
 			lines.append(f'  {change_emoji} 余额变化: {change_symbol}${detail["balance_change"]:.2f}')
 	else:
-		# 无任何变化
 		lines.extend(['  ━━━━━━━━━━━━━━━━━━━━', '  ℹ️  今日已签到，无变化'])
 
 	return '\n'.join(lines)
@@ -381,10 +383,7 @@ async def main():
 			if success:
 				success_count += 1
 
-			should_notify_this_account = False
-
 			if not success:
-				should_notify_this_account = True
 				need_notify = True
 				account_name = account.get_display_name(i)
 				print(f'[NOTIFY] {account_name} failed, will send notification')
@@ -430,21 +429,42 @@ async def main():
 						'success': success,
 					}
 
-			if should_notify_this_account:
-				account_name = account.get_display_name(i)
-				status = '[SUCCESS]' if success else '[FAIL]'
-				account_result = f'{status} {account_name}'
-				if user_info_after and user_info_after.get('success'):
-					account_result += f'\n{user_info_after["display"]}'
-				elif user_info_after:
-					account_result += f'\n{user_info_after.get("error", "Unknown error")}'
-				notification_content.append(account_result)
+			provider_config_for_detail = app_config.get_provider(account.provider)
+			if account_key not in account_check_in_details:
+				account_check_in_details[account_key] = {
+					'name': account.get_display_name(i),
+					'provider_name': account.provider,
+					'provider_domain': provider_config_for_detail.domain if provider_config_for_detail else '',
+					'before_quota': user_info_before['quota'] if user_info_before and user_info_before.get('success') else None,
+					'before_used': user_info_before['used_quota'] if user_info_before and user_info_before.get('success') else None,
+					'after_quota': user_info_after['quota'] if user_info_after and user_info_after.get('success') else None,
+					'after_used': user_info_after['used_quota'] if user_info_after and user_info_after.get('success') else None,
+					'check_in_reward': 0,
+					'usage_increase': 0,
+					'balance_change': 0,
+					'success': success,
+					'error_message': None if success else (user_info_after.get('error') if user_info_after else 'Unknown error'),
+				}
 
 		except Exception as e:
 			account_name = account.get_display_name(i)
 			print(f'[FAILED] {account_name} processing exception: {e}')
 			need_notify = True  # 异常也需要通知
-			notification_content.append(f'[FAIL] {account_name} exception: {str(e)[:50]}...')
+			provider_config_for_detail = app_config.get_provider(account.provider)
+			account_check_in_details[account_key] = {
+				'name': account_name,
+				'provider_name': account.provider,
+				'provider_domain': provider_config_for_detail.domain if provider_config_for_detail else '',
+				'before_quota': None,
+				'before_used': None,
+				'after_quota': None,
+				'after_used': None,
+				'check_in_reward': 0,
+				'usage_increase': 0,
+				'balance_change': 0,
+				'success': False,
+				'error_message': str(e)[:100],
+			}
 
 	# 检查余额变化
 	current_balance_hash = generate_balance_hash(current_balances) if current_balances else None
@@ -462,20 +482,14 @@ async def main():
 		else:
 			print('[INFO] No balance changes detected')
 
-	# 为有余额变化的情况添加所有成功账号到通知内容
-	if balance_changed:
+	# 只要需要发送通知，就将所有账号统一渲染为同一种卡片内容
+	if need_notify:
 		for i, account in enumerate(accounts):
 			account_key = f'account_{i + 1}'
-			if account_key in account_check_in_details:
-				detail = account_check_in_details[account_key]
-				account_name = detail['name']
-
-				# 使用格式化函数生成通知消息
-				account_result = format_check_in_notification(detail)
-
-				# 检查是否已经在通知内容中（避免重复）
-				if not any(account_name in item for item in notification_content):
-					notification_content.append(account_result)
+			if account_key not in account_check_in_details:
+				continue
+			detail = account_check_in_details[account_key]
+			notification_content.append(format_check_in_notification(detail))
 
 	# 保存当前余额hash
 	if current_balance_hash:
@@ -497,11 +511,19 @@ async def main():
 			summary.append('[ERROR] All accounts check-in failed')
 
 		time_info = f'[TIME] Execution time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
+		success_rate = success_count / total_count if total_count else 0
+		if success_rate == 1:
+			card_color = 'green'
+		elif success_rate > 0:
+			card_color = 'orange'
+		else:
+			card_color = 'red'
+		card_title = 'AnyRouter Check-in Results'
 
-		notify_content = '\n\n'.join([time_info, '\n'.join(notification_content), '\n'.join(summary)])
+		notify_content = '\n\n'.join([time_info, '\n\n'.join(notification_content), '\n'.join(summary)])
 
 		print(notify_content)
-		notify.push_message('AnyRouter Check-in Alert', notify_content, msg_type='text')
+		notify.push_message(card_title, notify_content, msg_type=card_color)
 		print('[NOTIFY] Notification sent due to failures or balance changes')
 	else:
 		print('[INFO] All accounts successful and no balance changes detected, notification skipped')

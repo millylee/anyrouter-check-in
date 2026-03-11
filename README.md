@@ -235,7 +235,7 @@ ANYROUTER_ACCOUNT_222222_XINGYUNGEPT
 ANYROUTER_ACCOUNT_333333_APIKEY
 ```
 
-> **为什么不能只用 api_user？**
+> **为什么不能只用 api_user？**  
 > `api_user` 是各平台内部的自增数字 ID，不同平台间完全独立，相同数字完全可能出现在多个平台（例如平台 A 和平台 B 各有用户 ID 12345，实为两个不同的人）。必须加上平台标识才能唯一确定一个账号。
 
 ### 用法
@@ -523,36 +523,32 @@ uv run pytest tests/ --cov=.
 ```json
 [
   {
-    "domain": "https://anyrouter.top",
-    "api_user": "123456",
-    "env_key_suffix": "123456_ANYROUTER"
+    "domain": "https://anyrouter.top"
   },
   {
-    "domain": "https://agentrouter.org",
-    "api_user": "789012",
-    "env_key_suffix": "789012_AGENTROUTER"
+    "domain": "https://agentrouter.org"
   }
 ]
 ```
 
-若不填写 `api_user` 和 `env_key_suffix`，扩展会自动调用 `/api/user/self` 解析 `api_user`，并以 `{api_user}_{PROVIDER}` 格式自动生成 `env_key_suffix`。也可使用"📥 导入"按钮直接粘贴 `ANYROUTER_ACCOUNTS` 的 JSON 内容批量导入（见下文）。
+推荐只填写 `domain`。扩展会在每次同步时实时从浏览器提取当前 `session`，并调用 `/api/user/self` 解析最新 `api_user`，再自动生成 `{api_user}_{PROVIDER}` 格式的 secret 后缀。
 
 **字段说明**：
 
 - `domain`（必需）：站点域名，用于从浏览器中提取 cookie
-- `api_user`（可选）：API 用户 ID，不填时自动调用 `/api/user/self` 接口获取
-- `env_key_suffix`（可选）：secret 名称后缀，生成 `ANYROUTER_ACCOUNT_{suffix}`；不填则自动生成为 `{api_user}_{PROVIDER}`（如 `123456_ANYROUTER`）
+- `api_user`（可选）：若手动填写会参与 secret 命名；留空时同步时自动调用 `/api/user/self` 获取
+- `env_key_suffix`（可选）：secret 名称后缀，生成 `ANYROUTER_ACCOUNT_{suffix}`；留空时同步时自动生成为 `{api_user}_{PROVIDER}`（如 `123456_ANYROUTER`）
 - `cookie_name`（可选）：要提取的 cookie 名称，默认为 `session`
 
 ### 从 ANYROUTER_ACCOUNTS 一键导入
 
 点击弹窗底部的"📥 导入"按钮，粘贴 GitHub Secrets 中 `ANYROUTER_ACCOUNTS` 的 JSON 内容（支持多行），扩展会自动：
 
-1. 解析 `cookies.session` + `api_user` + `provider` 字段
+1. 校验账号中存在 `cookies.session`
 2. 通过内置域名映射找到对应 `domain`
-3. 生成统一格式的 `env_key_suffix`（`{api_user}_{PROVIDER}`）
+3. 仅生成 `{"domain":"..."}` 形式的账号列表
 
-支持"导入并覆盖"和"导入并合并（去重）"两种模式。
+导入后的账号不会保留原始 `api_user`、`env_key_suffix` 或旧 `session`；后续同步始终实时抓取浏览器中的最新登录态。支持"导入并覆盖"和"导入并合并（按 domain 去重）"两种模式。
 
 ### 前提条件
 
@@ -643,7 +639,8 @@ Tampermonkey 会自动识别并弹出安装确认页面。
 - **修复 GitHub Secrets 加密 bug**：原先用 TweetNaCl 手动模拟 sealed box，nonce 由 `nacl.hash`（SHA-512）派生，而 GitHub 的 libsodium `crypto_box_seal` 使用 Blake2b 派生 nonce，二者不兼容导致 GitHub 无法解密推送的 secret。现改用 `libsodium-wrappers`，通过 `sodium.crypto_box_seal()` 实现正确的 sealed box 加密
 - Chrome 扩展：引入 `libsodium.min.js` + `libsodium-wrappers.min.js`，替换 `tweetnacl.min.js`，manifest.json 添加 `wasm-unsafe-eval` CSP
 - Tampermonkey：`@require` 改为 libsodium CDN 版本
-- 修复导入 `_imported_session` 在列表模式保存后丢失的 bug（添加隐藏 input 持久化）
+- 导入 `ANYROUTER_ACCOUNTS` 时仅保留 `domain`，不再保留旧 `api_user`、`env_key_suffix` 或 `session`
+- Chrome 扩展和 Tampermonkey 脚本同步时始终实时抓取浏览器中的最新 `session`，并重新调用 `/api/user/self` 解析当前 `api_user`
 
 #### v1.3 - Secret 命名规范统一
 
@@ -656,7 +653,7 @@ Tampermonkey 会自动识别并弹出安装确认页面。
 
 - **Tampermonkey 油猴脚本**：新增 `anyrouter-cookie-updater.user.js`，功能与 Chrome 扩展对等，支持所有主流浏览器，通过 `GM_cookie` 读取 cookie，通过 `GM_xmlhttpRequest` 跨域调用 GitHub API，通过 `GM_registerMenuCommand` 注册油猴菜单命令，内置同款设置面板（列表/JSON 双模式）和日志查看器
 - 自动同步支持基于页面加载的间隔检查（`GM_setValue` 记录上次同步时间）
-- **从 ANYROUTER_ACCOUNTS 一键导入**：Chrome 扩展和 Tampermonkey 脚本均新增"📥 导入"按钮，粘贴原有 `ANYROUTER_ACCOUNTS` JSON（支持多行）即可批量转换导入，支持覆盖或合并去重两种模式
+- **从 ANYROUTER_ACCOUNTS 一键导入**：Chrome 扩展和 Tampermonkey 脚本均新增"📥 导入"按钮，粘贴原有 `ANYROUTER_ACCOUNTS` JSON（支持多行）后会按 provider 转换为 domain 列表，支持覆盖或按 domain 合并去重
 - **UI 优化**：`cookie_name` 字段预填 `session`；JSON 模式空 textarea 不再报错可直接切换；日志按钮改为紫色，导入按钮为橙色，颜色层次更清晰
 
 #### v1.1 - Chrome 扩展体验优化
