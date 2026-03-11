@@ -44,7 +44,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   await Logger.info('Scheduled sync triggered');
   const result = await syncAllAccounts();
   const title = result.success ? '✅ Cookie 同步完成' : '❌ Cookie 同步失败';
-  chrome.notifications.create({ type: 'basic', iconUrl: 'icon48.png', title, message: result.summary || result.error || '' });
+  chrome.notifications.create({ type: 'basic', iconUrl: 'icon.png', title, message: result.summary || result.error || '' });
 });
 
 async function setupAlarm() {
