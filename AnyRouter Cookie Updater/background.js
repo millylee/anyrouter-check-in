@@ -125,6 +125,50 @@ const DOMAIN_TO_PROVIDER = {
   'https://welfare.apikey.cc':   'APIKEY',
 };
 
+/**
+ * Search for a named cookie across ALL cookie stores (default + incognito etc.)
+ * using both {url} and {domain} strategies, to work around Service Worker
+ * store isolation in MV3.
+ *
+ * Returns the cookie value string, or null if not found.
+ */
+async function findCookieAcrossStores(domain, cookieName) {
+  const hostname = new URL(domain).hostname;
+  const url = domain.replace(/\/$/, '');
+
+  // Enumerate every cookie store the extension can see
+  let stores;
+  try {
+    stores = await chrome.cookies.getAllCookieStores();
+  } catch {
+    stores = [{ id: '0' }];
+  }
+
+  for (const store of stores) {
+    const storeId = store.id;
+
+    // Strategy 1: url-based (respects scope rules, but works in SW for https)
+    try {
+      const byUrl = await chrome.cookies.getAll({ url, name: cookieName, storeId });
+      if (byUrl.length > 0) return byUrl[0].value;
+    } catch { /* ignore */ }
+
+    // Strategy 2: domain-based (hostname suffix match, ignores scope)
+    try {
+      const byDomain = await chrome.cookies.getAll({ domain: hostname, name: cookieName, storeId });
+      if (byDomain.length > 0) return byDomain[0].value;
+    } catch { /* ignore */ }
+
+    // Strategy 3: dot-prefixed domain (matches cookies set on .hostname)
+    try {
+      const byDotDomain = await chrome.cookies.getAll({ domain: `.${hostname}`, name: cookieName, storeId });
+      if (byDotDomain.length > 0) return byDotDomain[0].value;
+    } catch { /* ignore */ }
+  }
+
+  return null;
+}
+
 async function syncOneAccount(config, account) {
   const { domain, cookie_name } = account;
   let { env_key_suffix } = account;
@@ -134,24 +178,24 @@ async function syncOneAccount(config, account) {
   try {
     await Logger.info(`Extracting cookie "${targetCookieName}" for ${label}`, { domain });
 
-    // Query by domain (hostname only) so the Service Worker gets all cookies
-    // regardless of Secure/SameSite/httpOnly flags.  Using {url} in a SW
-    // context returns an empty array because the SW is not the origin page.
-    const hostname = new URL(domain).hostname;
-    const cookies = await chrome.cookies.getAll({ domain: hostname, name: targetCookieName });
-    const cookie = cookies[0] ?? null;
+    const cookieValue = await findCookieAcrossStores(domain, targetCookieName);
 
-    if (!cookie) {
-      // Also list all cookie names for this domain to aid debugging
-      const allCookies = await chrome.cookies.getAll({ domain: hostname });
+    if (!cookieValue) {
+      const hostname = new URL(domain).hostname;
+      // Collect diagnostics: list all cookies across all stores for this domain
+      const stores = await chrome.cookies.getAllCookieStores();
+      const allNames = [];
+      for (const store of stores) {
+        const cs = await chrome.cookies.getAll({ domain: hostname, storeId: store.id });
+        cs.forEach(c => allNames.push(`[store:${store.id}] ${c.name}`));
+      }
       await Logger.error(`Cookie "${targetCookieName}" not found for ${label}`, {
         domain,
-        available: allCookies.map(c => c.name)
+        available: allNames,
+        stores: stores.map(s => s.id)
       });
       return { success: false, label, error: `cookie "${targetCookieName}" not found` };
     }
-
-    const cookieValue = cookie.value;
     await Logger.success(`Cookie extracted for ${label}`, { length: cookieValue.length });
 
     await Logger.info(`Fetching api_user from /api/user/self for ${label}...`);
