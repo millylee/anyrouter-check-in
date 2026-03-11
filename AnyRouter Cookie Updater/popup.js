@@ -131,7 +131,6 @@ function addAccountItem(data = {}) {
         <input type="text" class="f-env_key_suffix" placeholder="自动生成 api_user_PROVIDER" value="${esc(data.env_key_suffix || '')}">
       </div>
     </div>
-    <input type="hidden" class="f-imported-session" value="${esc(data._imported_session || '')}">
   `;
   item.querySelector('.account-item-del').addEventListener('click', () => {
     item.remove();
@@ -155,11 +154,9 @@ function collectFromList() {
     const api_user        = item.querySelector('.f-api_user').value.trim();
     const env_key_suffix  = item.querySelector('.f-env_key_suffix').value.trim();
     const cookie_name     = item.querySelector('.f-cookie_name').value.trim();
-    const importedSession = item.querySelector('.f-imported-session')?.value || '';
     if (api_user)        entry.api_user        = api_user;
     if (env_key_suffix)  entry.env_key_suffix  = env_key_suffix;
     if (cookie_name && cookie_name !== 'session') entry.cookie_name = cookie_name;
-    if (importedSession) entry._imported_session = importedSession;
     return entry;
   }).filter(Boolean);
 }
@@ -212,7 +209,7 @@ function openImportDialog() {
     </div>
     <div style="font-size:11px;color:#57606a;margin-bottom:8px;line-height:1.5">
       粘贴 GitHub Secrets 中 <strong>ANYROUTER_ACCOUNTS</strong> 的 JSON 内容（支持多行），
-      脚本将自动解析 cookies.session + api_user + provider，转换为本插件所需格式。
+      脚本仅解析 provider 并转换为 domain 列表，后续同步始终实时抓取当前浏览器中的 session 和 api_user。
     </div>
     <textarea id="importTa" style="
       width:100%;min-height:120px;padding:7px 9px;border:1px solid #d0d7de;border-radius:5px;
@@ -266,13 +263,11 @@ function openImportDialog() {
     let final = imported;
     if (merge) {
       const existing = currentMode === 'list' ? collectFromList() : (collectFromJson() || []);
-      // Deduplicate by api_user, imported takes precedence
-      const byApiUser = {};
+      const byDomain = {};
       [...existing, ...imported].forEach(a => {
-        const key = a.api_user || a.domain;
-        byApiUser[key] = a;
+        byDomain[a.domain] = a;
       });
-      final = Object.values(byApiUser);
+      final = Object.values(byDomain);
     }
 
     overlay.remove();
@@ -292,9 +287,7 @@ function openImportDialog() {
 /**
  * Convert ANYROUTER_ACCOUNTS format to plugin format.
  * Input:  [{cookies:{session:"..."}, api_user:"xxx", provider:"anyrouter"}, ...]
- * Output: [{domain:"https://...", api_user:"xxx", env_key_suffix:"xxx_ANYROUTER"}, ...]
- *
- * Secret naming: always {api_user}_{PROVIDER} to avoid cross-platform ID collisions.
+ * Output: [{domain:"https://..."}, ...]
  */
 function convertFromAnyRouterAccounts(items) {
   return items.map(item => {
@@ -305,16 +298,7 @@ function convertFromAnyRouterAccounts(items) {
     const domain   = PROVIDER_DOMAINS[provider] || null;
     if (!domain) return null;
 
-    const entry = { domain };
-    if (item.api_user) {
-      entry.api_user = String(item.api_user);
-      // Always use {api_user}_{PROVIDER} — IDs are per-platform and can collide across providers
-      entry.env_key_suffix = `${item.api_user}_${provider.toUpperCase()}`;
-    }
-    // Store the actual session value so background.js can use it directly
-    // (no need to re-extract from browser if we already have it)
-    entry._imported_session = sessionCookie;
-    return entry;
+    return { domain };
   }).filter(Boolean);
 }
 

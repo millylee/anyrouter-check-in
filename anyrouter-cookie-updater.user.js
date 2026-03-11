@@ -253,31 +253,23 @@
 
   async function syncOneAccount(cfg, account) {
     const { domain, cookie_name } = account;
-    let { api_user, env_key_suffix } = account;
+    let { env_key_suffix } = account;
     const targetCookieName = cookie_name || 'session';
-    const label = env_key_suffix || api_user || domain;
+    const label = env_key_suffix || domain;
 
     try {
-      let cookieValue = account._imported_session || null;
-
-      if (cookieValue) {
-        log.info(`Using imported cookie for ${label}`, { source: 'import' });
-      } else {
-        log.info(`Extracting cookie "${targetCookieName}" for ${label}`);
-        cookieValue = await getCookieValue(domain, targetCookieName);
-        if (!cookieValue) {
-          log.error(`Cookie "${targetCookieName}" not found for ${label}`, { domain });
-          return { success: false, label, error: `cookie not found` };
-        }
-        log.success(`Cookie extracted for ${label}`, { length: cookieValue.length });
+      log.info(`Extracting cookie "${targetCookieName}" for ${label}`);
+      const cookieValue = await getCookieValue(domain, targetCookieName);
+      if (!cookieValue) {
+        log.error(`Cookie "${targetCookieName}" not found for ${label}`, { domain });
+        return { success: false, label, error: `cookie not found` };
       }
+      log.success(`Cookie extracted for ${label}`, { length: cookieValue.length });
 
-      if (!api_user) {
-        log.info(`Fetching api_user from /api/user/self for ${label}`);
-        api_user = await fetchApiUser(domain, targetCookieName, cookieValue);
-        if (api_user) log.success(`Auto-resolved api_user: ${api_user}`);
-        else log.info(`api_user not resolved`);
-      }
+      log.info(`Fetching api_user from /api/user/self for ${label}`);
+      const api_user = await fetchApiUser(domain, targetCookieName, cookieValue);
+      if (api_user) log.success(`Resolved api_user: ${api_user}`);
+      else log.error(`Could not resolve api_user for ${label}`);
 
       // Always use {api_user}_{PROVIDER} format to avoid cross-platform ID collisions.
       // env_key_suffix takes priority only if explicitly set (e.g. for custom providers).
@@ -343,14 +335,7 @@
       const provider = item.provider || 'anyrouter';
       const domain = PROVIDER_DOMAINS[provider] || null;
       if (!domain) return null;
-      const entry = { domain };
-      if (item.api_user) {
-        entry.api_user = String(item.api_user);
-        // Always use {api_user}_{PROVIDER} — IDs are per-platform and can collide across providers
-        entry.env_key_suffix = `${item.api_user}_${provider.toUpperCase()}`;
-      }
-      entry._imported_session = sessionCookie;
-      return entry;
+      return { domain };
     }).filter(Boolean);
   }
 
@@ -374,7 +359,7 @@
       <div style="font-weight:700;font-size:14px;margin-bottom:10px">📥 从 ANYROUTER_ACCOUNTS 导入</div>
       <div style="font-size:11px;color:#57606a;margin-bottom:8px;line-height:1.5">
         粘贴 <strong>ANYROUTER_ACCOUNTS</strong> 的 JSON 内容（支持多行），
-        自动解析 cookies.session + api_user + provider，转换为本脚本所需格式。
+        脚本仅解析 provider 并转换为 domain 列表，后续同步始终实时抓取当前浏览器中的 session 和 api_user。
       </div>
       <textarea id="arc-import-ta" style="
         width:100%;min-height:120px;padding:7px 9px;border:1px solid #d0d7de;border-radius:5px;
@@ -428,9 +413,9 @@
       let final = imported;
       if (merge) {
         const existing = panelMode === 'list' ? collectFromList() : (collectFromJson(parentPanel) || []);
-        const byKey = {};
-        [...existing, ...imported].forEach(a => { byKey[a.api_user || a.domain] = a; });
-        final = Object.values(byKey);
+        const byDomain = {};
+        [...existing, ...imported].forEach(a => { byDomain[a.domain] = a; });
+        final = Object.values(byDomain);
       }
 
       overlay.remove();
@@ -590,7 +575,7 @@
           <div class="arc-field">
             <textarea id="arc-json-ta" placeholder='[
   { "domain": "https://anyrouter.top" },
-  { "domain": "https://agentrouter.org", "api_user": "789012" }
+  { "domain": "https://agentrouter.org" }
 ]'>${accounts.length > 0 ? esc(JSON.stringify(accounts, null, 2)) : ''}</textarea>
           </div>
           <div class="arc-json-err" id="arc-json-err">⚠ JSON 格式错误</div>
@@ -715,7 +700,6 @@
           <input type="text" class="f-env_key_suffix" placeholder="自动生成 api_user_PROVIDER" value="${esc(data.env_key_suffix || '')}">
         </div>
       </div>
-      <input type="hidden" class="f-imported-session" value="${esc(data._imported_session || '')}">
     `;
     item.querySelector('.arc-del').addEventListener('click', () => {
       item.remove();
@@ -766,12 +750,10 @@
       const api_user        = item.querySelector('.f-api_user').value.trim();
       const env_key_suffix  = item.querySelector('.f-env_key_suffix').value.trim();
       const cookie_name     = item.querySelector('.f-cookie_name').value.trim();
-      const importedSession = item.querySelector('.f-imported-session')?.value || '';
       if (api_user)        entry.api_user        = api_user;
       if (env_key_suffix)  entry.env_key_suffix  = env_key_suffix;
       // Only persist cookie_name if non-default
       if (cookie_name && cookie_name !== 'session') entry.cookie_name = cookie_name;
-      if (importedSession) entry._imported_session = importedSession;
       return entry;
     }).filter(Boolean);
   }
