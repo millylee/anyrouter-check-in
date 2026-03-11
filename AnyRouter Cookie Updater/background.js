@@ -1,3 +1,5 @@
+// libsodium core must be loaded first; wrappers depend on it
+importScripts('libsodium.js');
 importScripts('libsodium-wrappers.min.js');
 
 const ALARM_NAME = 'cookieSync';
@@ -225,15 +227,16 @@ async function getPublicKey(config) {
 }
 
 async function pushToGitHubSecret(config, secretName, secretValue) {
-  await sodium.ready;
+  // sodium.ready resolves with the initialized sodium instance
+  const _sodium = await sodium.ready;
 
   const { githubToken, repoOwner, repoName, environmentName } = config;
   const { key, key_id } = await getPublicKey(config);
 
-  const publicKeyBytes = sodium.from_base64(key, sodium.base64_variants.ORIGINAL);
-  const messageBytes = sodium.from_string(secretValue);
-  const encryptedBytes = sodium.crypto_box_seal(messageBytes, publicKeyBytes);
-  const encryptedValue = sodium.to_base64(encryptedBytes, sodium.base64_variants.ORIGINAL);
+  const publicKeyBytes = _sodium.from_base64(key, _sodium.base64_variants.ORIGINAL);
+  const messageBytes = _sodium.from_string(secretValue);
+  const encryptedBytes = _sodium.crypto_box_seal(messageBytes, publicKeyBytes);
+  const encryptedValue = _sodium.to_base64(encryptedBytes, _sodium.base64_variants.ORIGINAL);
 
   let url;
   if (environmentName) {

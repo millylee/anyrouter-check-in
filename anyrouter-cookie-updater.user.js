@@ -26,6 +26,7 @@
 // @connect      api.github.com
 // @connect      *
 //
+// @require      https://cdn.jsdelivr.net/npm/libsodium@0.7.13/dist/modules/libsodium.min.js
 // @require      https://cdn.jsdelivr.net/npm/libsodium-wrappers@0.7.13/dist/modules/libsodium-wrappers.min.js
 //
 // @run-at       document-idle
@@ -117,11 +118,11 @@
   //  GitHub Secrets encryption (libsodium crypto_box_seal)
   // ──────────────────────────────────────────────
   async function encryptSecret(base64PublicKey, plaintext) {
-    await sodium.ready;
-    const publicKeyBytes = sodium.from_base64(base64PublicKey, sodium.base64_variants.ORIGINAL);
-    const messageBytes = sodium.from_string(plaintext);
-    const encryptedBytes = sodium.crypto_box_seal(messageBytes, publicKeyBytes);
-    return sodium.to_base64(encryptedBytes, sodium.base64_variants.ORIGINAL);
+    const _sodium = await sodium.ready;
+    const publicKeyBytes = _sodium.from_base64(base64PublicKey, _sodium.base64_variants.ORIGINAL);
+    const messageBytes = _sodium.from_string(plaintext);
+    const encryptedBytes = _sodium.crypto_box_seal(messageBytes, publicKeyBytes);
+    return _sodium.to_base64(encryptedBytes, _sodium.base64_variants.ORIGINAL);
   }
 
   // ──────────────────────────────────────────────
