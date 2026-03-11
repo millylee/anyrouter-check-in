@@ -369,6 +369,7 @@ async def main():
 	notification_content = []
 	current_balances = {}
 	account_check_in_details = {}  # 存储每个账号的签到详情
+	account_notification_fallbacks = {}  # 存储无法生成详情卡片时的兜底文本
 	need_notify = False  # 是否需要发送通知
 	balance_changed = False  # 余额是否有变化
 
@@ -379,10 +380,7 @@ async def main():
 			if success:
 				success_count += 1
 
-			should_notify_this_account = False
-
 			if not success:
-				should_notify_this_account = True
 				need_notify = True
 				account_name = account.get_display_name(i)
 				print(f'[NOTIFY] {account_name} failed, will send notification')
@@ -428,15 +426,14 @@ async def main():
 						'success': success,
 					}
 
-			if should_notify_this_account:
-				account_name = account.get_display_name(i)
-				status = '[SUCCESS]' if success else '[FAIL]'
-				account_result = f'{status} {account_name}'
-				if user_info_after and user_info_after.get('success'):
-					account_result += f'\n{user_info_after["display"]}'
-				elif user_info_after:
-					account_result += f'\n{user_info_after.get("error", "Unknown error")}'
-				notification_content.append(account_result)
+			account_name = account.get_display_name(i)
+			status = '[SUCCESS]' if success else '[FAIL]'
+			account_result = f'{status} {account_name}'
+			if user_info_after and user_info_after.get('success'):
+				account_result += f'\n{user_info_after["display"]}'
+			elif user_info_after:
+				account_result += f'\n{user_info_after.get("error", "Unknown error")}'
+			account_notification_fallbacks[account_key] = account_result
 
 		except Exception as e:
 			account_name = account.get_display_name(i)
@@ -460,20 +457,22 @@ async def main():
 		else:
 			print('[INFO] No balance changes detected')
 
-	# 只要需要发送通知，就补全所有已获取到的账号详情，保持完整的卡片式通知内容
+	# 只要需要发送通知，就补全所有账号内容，优先使用详细卡片格式，失败时回退到简要文本
 	if need_notify:
 		for i, account in enumerate(accounts):
 			account_key = f'account_{i + 1}'
+			account_name = account.get_display_name(i)
+
 			if account_key in account_check_in_details:
 				detail = account_check_in_details[account_key]
-				account_name = detail['name']
-
-				# 使用格式化函数生成通知消息
 				account_result = format_check_in_notification(detail)
+			elif account_key in account_notification_fallbacks:
+				account_result = account_notification_fallbacks[account_key]
+			else:
+				continue
 
-				# 检查是否已经在通知内容中（避免重复）
-				if not any(account_name in item for item in notification_content):
-					notification_content.append(account_result)
+			if not any(account_name in item for item in notification_content):
+				notification_content.append(account_result)
 
 	# 保存当前余额hash
 	if current_balance_hash:
