@@ -70,7 +70,7 @@ class NotificationKit:
 		with httpx.Client(timeout=30.0) as client:
 			client.post(self.dingding_webhook, json=data)
 
-	def send_feishu(self, title: str, content: str):
+	def send_feishu(self, title: str, content: str, template: str = 'blue'):
 		if not self.feishu_webhook:
 			raise ValueError('Feishu Webhook not configured')
 
@@ -78,7 +78,7 @@ class NotificationKit:
 			'msg_type': 'interactive',
 			'card': {
 				'elements': [{'tag': 'markdown', 'content': content, 'text_align': 'left'}],
-				'header': {'template': 'blue', 'title': {'content': title, 'tag': 'plain_text'}},
+				'header': {'template': template, 'title': {'content': title, 'tag': 'plain_text'}},
 			},
 		}
 		with httpx.Client(timeout=30.0) as client:
@@ -136,13 +136,15 @@ class NotificationKit:
 		with httpx.Client(timeout=30.0) as client:
 			client.post(url, json=data)
 
-	def push_message(self, title: str, content: str, msg_type: Literal['text', 'html'] = 'text'):
+	def push_message(self, title: str, content: str, msg_type: Literal['text', 'html', 'green', 'orange', 'red', 'blue'] = 'text'):
+		feishu_template = msg_type if msg_type in {'green', 'orange', 'red', 'blue'} else 'blue'
+		email_type = msg_type if msg_type in {'text', 'html'} else 'text'
 		notifications = [
-			('Email', lambda: self.send_email(title, content, msg_type)),
+			('Email', lambda: self.send_email(title, content, email_type)),
 			('PushPlus', lambda: self.send_pushplus(title, content)),
 			('Server Push', lambda: self.send_serverPush(title, content)),
 			('DingTalk', lambda: self.send_dingtalk(title, content)),
-			('Feishu', lambda: self.send_feishu(title, content)),
+			('Feishu', lambda: self.send_feishu(title, content, feishu_template)),
 			('WeChat Work', lambda: self.send_wecom(title, content)),
 			('Gotify', lambda: self.send_gotify(title, content)),
 			('Telegram', lambda: self.send_telegram(title, content)),
