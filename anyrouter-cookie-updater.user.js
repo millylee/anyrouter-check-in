@@ -617,7 +617,7 @@
           </div>
           <div class="arc-json-err" id="arc-json-err">⚠ JSON 格式错误</div>
           <div class="arc-hint" style="margin-top:4px">
-            domain（必填）· api_user（可选，自动获取）· env_key_suffix（可选）· cookie_name（可选，默认 session）
+            domain（必填）· api_user（可选，自动获取）· env_key_suffix（可选，自动生成为 api_user_PROVIDER）· cookie_name（可选，默认 session）
           </div>
         </div>
       </div>
@@ -734,7 +734,7 @@
         </div>
         <div class="arc-field">
           <label>env_key_suffix（可留空）</label>
-          <input type="text" class="f-env_key_suffix" placeholder="默认用 api_user" value="${esc(data.env_key_suffix || '')}">
+          <input type="text" class="f-env_key_suffix" placeholder="自动生成 api_user_PROVIDER" value="${esc(data.env_key_suffix || '')}">
         </div>
       </div>
     `;

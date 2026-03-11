@@ -128,7 +128,7 @@ function addAccountItem(data = {}) {
       </div>
       <div class="field-wrap">
         <label>env_key_suffix（可留空）</label>
-        <input type="text" class="f-env_key_suffix" placeholder="默认用 api_user" value="${esc(data.env_key_suffix || '')}">
+        <input type="text" class="f-env_key_suffix" placeholder="自动生成 api_user_PROVIDER" value="${esc(data.env_key_suffix || '')}">
       </div>
     </div>
   `;
