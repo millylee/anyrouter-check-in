@@ -167,8 +167,37 @@ async def prepare_cookies(account_name: str, provider_config, user_cookies: dict
 	return {**waf_cookies, **user_cookies}
 
 
+NEW_API_CHECKIN_PATH = '/api/user/checkin'
+
+
+def _parse_check_in_response(account_name: str, response) -> bool:
+	"""解析签到响应，返回是否成功"""
+	if response.status_code == 200:
+		try:
+			result = response.json()
+			if result.get('ret') == 1 or result.get('code') == 0 or result.get('success'):
+				print(f'[SUCCESS] {account_name}: Check-in successful!')
+				return True
+			else:
+				error_msg = result.get('msg', result.get('message', 'Unknown error'))
+				already_checked_keywords = ['已经签到', '已签到', '重复签到', 'already checked', 'already signed']
+				if any(keyword in error_msg.lower() for keyword in already_checked_keywords):
+					print(f'[SUCCESS] {account_name}: Already checked in today')
+					return True
+				print(f'[FAILED] {account_name}: Check-in failed - {error_msg}')
+				return False
+		except json.JSONDecodeError:
+			if 'success' in response.text.lower():
+				print(f'[SUCCESS] {account_name}: Check-in successful!')
+				return True
+			else:
+				print(f'[FAILED] {account_name}: Check-in failed - Invalid response format')
+				return False
+	return False
+
+
 def execute_check_in(client, account_name: str, provider_config, headers: dict):
-	"""执行签到请求"""
+	"""执行签到请求，自动适配 one-api(/api/user/sign_in) 和 new-api(/api/user/checkin)"""
 	print(f'[NETWORK] {account_name}: Executing check-in')
 
 	checkin_headers = headers.copy()
@@ -179,29 +208,16 @@ def execute_check_in(client, account_name: str, provider_config, headers: dict):
 
 	print(f'[RESPONSE] {account_name}: Response status code {response.status_code}')
 
+	# new-api 平台使用 /api/user/checkin，而非 /api/user/sign_in
+	# 收到 404 且当前路径不是 new-api 路径时，自动 fallback
+	if response.status_code == 404 and provider_config.sign_in_path != NEW_API_CHECKIN_PATH:
+		fallback_url = f'{provider_config.domain}{NEW_API_CHECKIN_PATH}'
+		print(f'[INFO] {account_name}: sign_in returned 404, trying new-api checkin endpoint: {NEW_API_CHECKIN_PATH}')
+		response = client.post(fallback_url, headers=checkin_headers, timeout=30)
+		print(f'[RESPONSE] {account_name}: Fallback response status code {response.status_code}')
+
 	if response.status_code == 200:
-		try:
-			result = response.json()
-			if result.get('ret') == 1 or result.get('code') == 0 or result.get('success'):
-				print(f'[SUCCESS] {account_name}: Check-in successful!')
-				return True
-			else:
-				error_msg = result.get('msg', result.get('message', 'Unknown error'))
-				# 检查是否是"已经签到过"的情况，这种情况也算成功
-				already_checked_keywords = ['已经签到', '已签到', '重复签到', 'already checked', 'already signed']
-				if any(keyword in error_msg.lower() for keyword in already_checked_keywords):
-					print(f'[SUCCESS] {account_name}: Already checked in today')
-					return True
-				print(f'[FAILED] {account_name}: Check-in failed - {error_msg}')
-				return False
-		except json.JSONDecodeError:
-			# 如果不是 JSON 响应，检查是否包含成功标识
-			if 'success' in response.text.lower():
-				print(f'[SUCCESS] {account_name}: Check-in successful!')
-				return True
-			else:
-				print(f'[FAILED] {account_name}: Check-in failed - Invalid response format')
-				return False
+		return _parse_check_in_response(account_name, response)
 	else:
 		print(f'[FAILED] {account_name}: Check-in failed - HTTP {response.status_code}')
 		return False
@@ -216,14 +232,24 @@ def format_check_in_notification(detail: dict) -> str:
 	Returns:
 		格式化后的通知消息
 	"""
+	provider_info = ''
+	if detail.get('provider_name') or detail.get('provider_domain'):
+		pname = detail.get('provider_name', '')
+		pdomain = detail.get('provider_domain', '')
+		provider_info = f'  🌐 平台: {pname} ({pdomain})\n' if pdomain else f'  🌐 平台: {pname}\n'
+
 	lines = [
 		f'[CHECK-IN] {detail["name"]}',
 		'  ━━━━━━━━━━━━━━━━━━━━',
+	]
+	if provider_info:
+		lines.append(provider_info.rstrip('\n'))
+	lines.extend([
 		'  📍 签到前',
 		f'     💵 余额: ${detail["before_quota"]:.2f}  |  📊 累计消耗: ${detail["before_used"]:.2f}',
 		'  📍 签到后',
 		f'     💵 余额: ${detail["after_quota"]:.2f}  |  📊 累计消耗: ${detail["after_used"]:.2f}',
-	]
+	])
 
 	# 判断是否有变化
 	has_reward = detail['check_in_reward'] != 0
@@ -387,15 +413,18 @@ async def main():
 					# 余额变化
 					balance_change = after_quota - before_quota
 
+					provider_config_for_detail = app_config.get_provider(account.provider)
 					account_check_in_details[account_key] = {
 						'name': account.get_display_name(i),
+						'provider_name': account.provider,
+						'provider_domain': provider_config_for_detail.domain if provider_config_for_detail else '',
 						'before_quota': before_quota,
 						'before_used': before_used,
 						'after_quota': after_quota,
 						'after_used': after_used,
-						'check_in_reward': check_in_reward,  # 签到获得
-						'usage_increase': usage_increase,  # 本次消耗
-						'balance_change': balance_change,  # 余额变化
+						'check_in_reward': check_in_reward,
+						'usage_increase': usage_increase,
+						'balance_change': balance_change,
 						'success': success,
 					}
 

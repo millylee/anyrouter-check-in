@@ -9,7 +9,9 @@
 
 多平台多账号自动签到，理论上支持所有 NewAPI、OneAPI 平台，目前内置支持 Any Router 与 Agent Router，其它可根据文档进行摸索配置。
 
-推荐搭配使用[Auo](https://github.com/millylee/auo)，支持任意 Claude Code Token 切换的工具。
+**配合 [Chrome 扩展 / 油猴脚本](#chrome-扩展anyrouter-cookie-updater) 食用效果更好** — 自动从浏览器提取 session cookie 并推送到 GitHub Secrets，cookie 过期时无需手动重新获取。
+
+推荐搭配使用 [Auo](https://github.com/millylee/auo)，支持任意 Claude Code Token 切换的工具。
 
 **维护开源不易，如果本项目帮助到了你，请帮忙点个 Star，谢谢!**
 
@@ -183,6 +185,79 @@
 ]
 ```
 
+## 多行 JSON 支持
+
+`ANYROUTER_ACCOUNTS` 和 `PROVIDERS` 环境变量现在支持多行 JSON 格式，无需手动压缩为单行。脚本会自动处理换行和缩进。
+
+在 GitHub Secrets 中可以直接粘贴格式化后的 JSON：
+
+```json
+[
+  {
+    "name": "我的主账号",
+    "cookies": {
+      "session": "abc123session"
+    },
+    "api_user": "12345"
+  },
+  {
+    "name": "备用账号",
+    "provider": "agentrouter",
+    "cookies": {
+      "session": "xyz789session"
+    },
+    "api_user": "67890"
+  }
+]
+```
+
+不需要再通过在线配置生成器后手动转为一行 JSON。
+
+## 单账号独立管理（ANYROUTER_ACCOUNT_* 前缀）
+
+参考 [autocheck-anyrouter](https://github.com/rakuyoMo/autocheck-anyrouter) 方案，支持通过 `ANYROUTER_ACCOUNT_*` 前缀的环境变量独立管理每个账号。
+
+### Secret 命名规范
+
+Secret 名称格式统一为：
+
+```
+ANYROUTER_ACCOUNT_{api_user}_{PROVIDER}
+```
+
+示例：
+
+```
+ANYROUTER_ACCOUNT_123456_ANYROUTER
+ANYROUTER_ACCOUNT_789012_AGENTROUTER
+ANYROUTER_ACCOUNT_111111_FREESTYLE
+ANYROUTER_ACCOUNT_222222_XINGYUNGEPT
+ANYROUTER_ACCOUNT_333333_APIKEY
+```
+
+> **为什么不能只用 api_user？**  
+> `api_user` 是各平台内部的自增数字 ID，不同平台间完全独立，相同数字完全可能出现在多个平台（例如平台 A 和平台 B 各有用户 ID 12345，实为两个不同的人）。必须加上平台标识才能唯一确定一个账号。
+
+### 用法
+
+在 GitHub Environment Secrets 中添加以 `ANYROUTER_ACCOUNT_` 为前缀的 secret，每个 secret 包含一个账号的 JSON 配置：
+
+```
+ANYROUTER_ACCOUNT_123456_ANYROUTER   = {"cookies": {"session": "new_session_value"}}
+ANYROUTER_ACCOUNT_789012_AGENTROUTER = {"cookies": {"session": "another_session"}, "api_user": "789012", "provider": "agentrouter"}
+```
+
+### 合并规则
+
+- 如果 `ANYROUTER_ACCOUNTS` 中存在 `api_user` 与 `ANYROUTER_ACCOUNT_*` 后缀匹配的账号，独立配置中的字段会**覆盖**主配置中的对应字段（适合仅更新 cookies）
+- 如果没有匹配到，独立配置的账号会作为新账号追加
+- 自动去重：相同 `api_user` 只保留第一个
+
+### 适用场景
+
+- 某个账号 cookie 过期时，只需更新对应的 `ANYROUTER_ACCOUNT_*` secret，无需修改整个 `ANYROUTER_ACCOUNTS`
+- 搭配 Chrome 插件 / Tampermonkey 脚本自动推送 cookie（见下文）
+
 ## 自定义 Provider 配置（可选）
 
 默认情况下，`anyrouter`、`agentrouter` 已内置配置，无需额外设置。如果你需要使用其他服务商，可以通过环境变量 `PROVIDERS` 配置：
@@ -347,7 +422,8 @@ uv sync --dev
 # 安装 Playwright 浏览器
 uv run playwright install chromium
 
-# 创建 .env 文件并配置（注意：JSON 必须是单行格式）
+# 创建 .env 文件并配置
+# 支持单行或多行 JSON（自动处理换行与空格）
 # 示例：
 # ANYROUTER_ACCOUNTS=[{"name":"账号1","cookies":{"session":"xxx"},"api_user":"12345"}]
 # PROVIDERS={"agentrouter":{"domain":"https://agentrouter.org"}}
@@ -412,6 +488,189 @@ uv run bandit -r . -c pyproject.toml
 uv run pytest tests/ --cov=.
 ```
 
+## Chrome 扩展：AnyRouter Cookie Updater
+
+本项目包含一个 Chrome 扩展 `AnyRouter Cookie Updater/`，可以自动从浏览器中提取已登录站点的 session cookie，并通过 GitHub API 推送到 GitHub Actions Environment Secrets。
+
+### 工作原理
+
+1. 从浏览器中提取已登录的 AnyRouter/其它平台的 `session` cookie
+2. 使用 GitHub API + libsodium sealed box 加密后推送到 Environment Secrets
+3. 生成 `ANYROUTER_ACCOUNT_*` 格式的 secret，签到脚本自动读取最新 cookie
+
+### 安装步骤
+
+1. 打开 Chrome，进入 `chrome://extensions/`
+2. 开启右上角的 "开发者模式"
+3. 点击 "加载已解压的扩展程序"
+4. 选择本仓库中的 `AnyRouter Cookie Updater/` 目录
+
+### 配置
+
+打开扩展弹窗，填写以下配置：
+
+| 配置项 | 说明 |
+| --- | --- |
+| **GitHub PAT** | Personal Access Token，需要 `repo` 权限（或 Environment secrets 写入权限） |
+| **仓库 Owner** | GitHub 用户名 |
+| **仓库名称** | 如 `anyrouter-check-in` |
+| **Environment 名称** | 如 `production`（留空则推送到 repository secrets） |
+| **账号列表** | JSON 数组，配置需要同步的账号 |
+| **同步间隔** | 定时同步间隔（分钟），建议 360（6 小时） |
+
+### 账号列表配置示例
+
+```json
+[
+  {
+    "domain": "https://anyrouter.top",
+    "api_user": "123456",
+    "env_key_suffix": "123456_ANYROUTER"
+  },
+  {
+    "domain": "https://agentrouter.org",
+    "api_user": "789012",
+    "env_key_suffix": "789012_AGENTROUTER"
+  }
+]
+```
+
+若不填写 `api_user` 和 `env_key_suffix`，扩展会自动调用 `/api/user/self` 解析 `api_user`，并以 `{api_user}_{PROVIDER}` 格式自动生成 `env_key_suffix`。也可使用"📥 导入"按钮直接粘贴 `ANYROUTER_ACCOUNTS` 的 JSON 内容批量导入（见下文）。
+
+**字段说明**：
+
+- `domain`（必需）：站点域名，用于从浏览器中提取 cookie
+- `api_user`（可选）：API 用户 ID，不填时自动调用 `/api/user/self` 接口获取
+- `env_key_suffix`（可选）：secret 名称后缀，生成 `ANYROUTER_ACCOUNT_{suffix}`；不填则自动生成为 `{api_user}_{PROVIDER}`（如 `123456_ANYROUTER`）
+- `cookie_name`（可选）：要提取的 cookie 名称，默认为 `session`
+
+### 从 ANYROUTER_ACCOUNTS 一键导入
+
+点击弹窗底部的"📥 导入"按钮，粘贴 GitHub Secrets 中 `ANYROUTER_ACCOUNTS` 的 JSON 内容（支持多行），扩展会自动：
+
+1. 解析 `cookies.session` + `api_user` + `provider` 字段
+2. 通过内置域名映射找到对应 `domain`
+3. 生成统一格式的 `env_key_suffix`（`{api_user}_{PROVIDER}`）
+
+支持"导入并覆盖"和"导入并合并（去重）"两种模式。
+
+### 前提条件
+
+- 需要在浏览器中保持各站点的登录状态
+- GitHub PAT 需要有对应仓库 Environment secrets 的写入权限
+
+### 创建 GitHub PAT
+
+1. 访问 [GitHub Settings > Developer settings > Personal access tokens > Fine-grained tokens](https://github.com/settings/tokens?type=beta)
+2. 点击 "Generate new token"
+3. 选择对应仓库，权限中启用 **Secrets** 的 Read and Write 权限
+4. 生成后复制 token 到扩展配置中
+
+## Tampermonkey 脚本：AnyRouter Cookie Updater
+
+除 Chrome 扩展外，本项目还提供 Tampermonkey 油猴脚本版本 `anyrouter-cookie-updater.user.js`，无需安装扩展，在任意支持油猴的浏览器（Chrome / Firefox / Edge / Safari）中均可使用。
+
+### 安装方式
+
+**方式一：直接安装（推荐）**
+
+安装 [Tampermonkey](https://www.tampermonkey.net/) 后，直接打开本仓库中的脚本文件：
+
+```
+anyrouter-cookie-updater.user.js
+```
+
+Tampermonkey 会自动识别并弹出安装确认页面。
+
+**方式二：手动新建**
+
+1. 打开 Tampermonkey 管理面板 → "添加新脚本"
+2. 将 `anyrouter-cookie-updater.user.js` 的内容完整粘贴进去，保存
+
+### 添加更多站点
+
+脚本顶部的 `@match` 指令控制脚本在哪些站点生效。如需支持其他 NewAPI/OneAPI 站点，在 Tampermonkey 编辑器中追加 `@match` 行：
+
+```js
+// @match        https://your-custom-site.com/*
+```
+
+### 使用方法
+
+访问任意已匹配的站点（需已登录），点击浏览器工具栏中的 Tampermonkey 图标，可看到以下菜单命令：
+
+| 命令 | 说明 |
+| --- | --- |
+| ⚙️ 设置 / 账号配置 | 打开配置面板，填写 GitHub 信息和账号列表 |
+| 🔄 立即同步本站 | 提取当前站点的 cookie 并推送到对应 secret |
+| 🔄 同步所有账号 | 遍历所有已配置账号逐个同步 |
+| 📋 查看日志 | 查看最近 80 条操作日志 |
+
+### 配置面板
+
+与 Chrome 扩展相同，支持**列表模式**和 **JSON 模式**两种账号输入方式，点击顶部 Tab 切换，数据互相同步。
+
+配置项说明：
+
+| 配置项 | 说明 |
+| --- | --- |
+| **GitHub PAT** | 同 Chrome 扩展，需要 Secrets 写入权限 |
+| **仓库 Owner / 仓库名称** | 你 Fork 的仓库信息 |
+| **Environment 名称** | 如 `production`，留空则推送到 repository secrets |
+| **账号列表** | 同 Chrome 扩展，`domain` 必填，其余可选 |
+| **自动同步间隔（分钟）** | 设为 0 关闭自动同步；大于 0 时，每次页面加载会检查距上次同步时间是否超过该间隔，若超过则自动同步 |
+
+### Chrome 扩展 vs 油猴脚本对比
+
+| 特性 | Chrome 扩展 | 油猴脚本 |
+| --- | --- | --- |
+| 支持浏览器 | Chrome / Edge | Chrome / Firefox / Edge / Safari 等 |
+| 需要开发者模式 | ✅ 是（未上架应用商店） | ❌ 否 |
+| 定时触发 | ✅ 后台 alarm，浏览器关闭也会触发 | ⚠️ 页面加载时检查，需要访问对应站点 |
+| 操作界面 | 扩展弹窗 | 页面内悬浮面板 + 油猴菜单 |
+| 跨站点 cookie | ✅ 可读任意域名 | ⚠️ 需在对应站点页面上运行 |
+
 ## 免责声明
 
 本脚本仅用于学习和研究目的，使用前请确保遵守相关网站的使用条款.
+
+## 开发日志
+
+### 2026-03-11
+
+#### v1.4 - 加密实现修复
+
+- **修复 GitHub Secrets 加密 bug**：原先用 TweetNaCl 手动模拟 sealed box，nonce 由 `nacl.hash`（SHA-512）派生，而 GitHub 的 libsodium `crypto_box_seal` 使用 Blake2b 派生 nonce，二者不兼容导致 GitHub 无法解密推送的 secret。现改用 `libsodium-wrappers`，通过 `sodium.crypto_box_seal()` 实现正确的 sealed box 加密
+- Chrome 扩展：引入 `libsodium.min.js` + `libsodium-wrappers.min.js`，替换 `tweetnacl.min.js`，manifest.json 添加 `wasm-unsafe-eval` CSP
+- Tampermonkey：`@require` 改为 libsodium CDN 版本
+- 修复导入 `_imported_session` 在列表模式保存后丢失的 bug（添加隐藏 input 持久化）
+
+#### v1.3 - Secret 命名规范统一
+
+- **统一 Secret 命名格式为 `{api_user}_{PROVIDER}`**：`api_user` 是各平台内部自增 ID，不同平台间可能重复，因此不能单独用 `api_user` 作为 secret 后缀，必须加上平台标识才能唯一区分
+- Chrome 插件和 Tampermonkey 脚本：导入 ANYROUTER_ACCOUNTS 时所有账号（包括 anyrouter 本身）统一生成 `{api_user}_{PROVIDER}` 格式的 `env_key_suffix`
+- `background.js` / Tampermonkey `syncOneAccount`：手动配置账号时，若未填写 `env_key_suffix`，在 `api_user` 自动解析成功后自动生成 `{api_user}_{PROVIDER}` 后缀，不再 fallback 为纯 `api_user`
+- README 更新 Secret 命名规范说明，删除混用两种格式的示例
+
+#### v1.2 - Tampermonkey 脚本 + 导入功能
+
+- **Tampermonkey 油猴脚本**：新增 `anyrouter-cookie-updater.user.js`，功能与 Chrome 扩展对等，支持所有主流浏览器，通过 `GM_cookie` 读取 cookie，通过 `GM_xmlhttpRequest` 跨域调用 GitHub API，通过 `GM_registerMenuCommand` 注册油猴菜单命令，内置同款设置面板（列表/JSON 双模式）和日志查看器
+- 自动同步支持基于页面加载的间隔检查（`GM_setValue` 记录上次同步时间）
+- **从 ANYROUTER_ACCOUNTS 一键导入**：Chrome 扩展和 Tampermonkey 脚本均新增"📥 导入"按钮，粘贴原有 `ANYROUTER_ACCOUNTS` JSON（支持多行）即可批量转换导入，支持覆盖或合并去重两种模式
+- **UI 优化**：`cookie_name` 字段预填 `session`；JSON 模式空 textarea 不再报错可直接切换；日志按钮改为紫色，导入按钮为橙色，颜色层次更清晰
+
+#### v1.1 - Chrome 扩展体验优化
+
+- **双模式账号配置**：Chrome 扩展 AnyRouter Cookie Updater 现支持两种账号输入方式，可随时切换且数据互相同步：
+  - **列表模式**：逐条填写，每个账号有独立的表单行，方便新增、删除和逐字段编辑
+  - **JSON 模式**：批量粘贴 JSON 数组，适合一次性导入多账号，含实时语法校验
+- **api_user 自动获取**：账号配置中 `api_user` 和 `env_key_suffix` 均变为可选字段；扩展在提取 cookie 后会自动调用 `/api/user/self` 接口解析用户 ID，最简配置只需填写 `domain`
+- **扩展图标**：使用项目 `icon.png` 替换临时生成的占位图标
+
+#### v1.0 - 初始版本
+
+- **通知增强**：飞书/通知消息中每个账号现在显示所属平台名称和域名（如 `🌐 平台: freestyle (https://api.freestyle.cc.cd)`），解决了之前通知中不知道 Account 1 对应哪个网站的问题
+- **多行 JSON 支持**：`ANYROUTER_ACCOUNTS` 和 `PROVIDERS` 环境变量支持多行 JSON，无需手动将在线配置生成器的输出压缩为一行
+- **ANYROUTER_ACCOUNT_* 独立账号管理**：参考 [autocheck-anyrouter](https://github.com/rakuyoMo/autocheck-anyrouter) 方案，支持通过 `ANYROUTER_ACCOUNT_` 前缀的环境变量独立管理每个账号的 cookie，某个账号过期时只需更新对应 secret
+- **GitHub Actions 适配**：workflow 自动注入所有 `ANYROUTER_ACCOUNT_*` secrets 到环境变量
+- **Chrome 扩展 AnyRouter Cookie Updater**：参考 Flow2API Token Updater，构建了自动从浏览器提取 session cookie 并推送到 GitHub Actions Environment Secrets 的 Chrome 扩展，实现 cookie 失效后的自动更新

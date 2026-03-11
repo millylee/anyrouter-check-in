@@ -69,6 +69,18 @@ jobs:
         restore-keys: |
           balance-hash-
 
+    - name: 注入 ANYROUTER_ACCOUNT_* secrets
+      shell: pwsh
+      env:
+        ALL_SECRETS: ${{ toJson(secrets) }}
+      run: |
+        $secrets = $env:ALL_SECRETS | ConvertFrom-Json
+        foreach ($prop in $secrets.PSObject.Properties) {
+          if ($prop.Name -match '^ANYROUTER_ACCOUNT_') {
+            "$($prop.Name)=$($prop.Value)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          }
+        }
+
     - name: 执行签到
       env:
         ANYROUTER_ACCOUNTS: ${{ secrets.ANYROUTER_ACCOUNTS }}
