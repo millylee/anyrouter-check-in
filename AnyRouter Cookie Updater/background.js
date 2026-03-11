@@ -1,4 +1,4 @@
-importScripts('tweetnacl.min.js');
+importScripts('libsodium-wrappers.min.js');
 
 const ALARM_NAME = 'cookieSync';
 
@@ -194,36 +194,7 @@ async function syncOneAccount(config, account) {
   }
 }
 
-// --- GitHub Secrets Encryption (libsodium sealed box via tweetnacl) ---
-
-function sealedBox(publicKey, message) {
-  const ephemeral = nacl.box.keyPair();
-  const nonce = sealedBoxNonce(ephemeral.publicKey, publicKey);
-  const encrypted = nacl.box(message, nonce, publicKey, ephemeral.secretKey);
-  const result = new Uint8Array(ephemeral.publicKey.length + encrypted.length);
-  result.set(ephemeral.publicKey);
-  result.set(encrypted, ephemeral.publicKey.length);
-  return result;
-}
-
-function sealedBoxNonce(ephemeralPk, recipientPk) {
-  const combined = new Uint8Array(ephemeralPk.length + recipientPk.length);
-  combined.set(ephemeralPk);
-  combined.set(recipientPk, ephemeralPk.length);
-  return nacl.hash(combined).slice(0, nacl.box.nonceLength);
-}
-
-function base64Decode(str) {
-  return Uint8Array.from(atob(str), c => c.charCodeAt(0));
-}
-
-function base64Encode(bytes) {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
+// --- GitHub Secrets Encryption (libsodium crypto_box_seal) ---
 
 let _cachedRepoId = null;
 async function getRepoId(config) {
@@ -254,13 +225,15 @@ async function getPublicKey(config) {
 }
 
 async function pushToGitHubSecret(config, secretName, secretValue) {
+  await sodium.ready;
+
   const { githubToken, repoOwner, repoName, environmentName } = config;
   const { key, key_id } = await getPublicKey(config);
 
-  const publicKeyBytes = base64Decode(key);
-  const secretBytes = new TextEncoder().encode(secretValue);
-  const sealed = sealedBox(publicKeyBytes, secretBytes);
-  const encryptedValue = base64Encode(sealed);
+  const publicKeyBytes = sodium.from_base64(key, sodium.base64_variants.ORIGINAL);
+  const messageBytes = sodium.from_string(secretValue);
+  const encryptedBytes = sodium.crypto_box_seal(messageBytes, publicKeyBytes);
+  const encryptedValue = sodium.to_base64(encryptedBytes, sodium.base64_variants.ORIGINAL);
 
   let url;
   if (environmentName) {

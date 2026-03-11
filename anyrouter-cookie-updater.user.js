@@ -26,7 +26,7 @@
 // @connect      api.github.com
 // @connect      *
 //
-// @require      https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl-fast.min.js
+// @require      https://cdn.jsdelivr.net/npm/libsodium-wrappers@0.7.13/dist/modules/libsodium-wrappers.min.js
 //
 // @run-at       document-idle
 // ==/UserScript==
@@ -114,39 +114,14 @@
   }
 
   // ──────────────────────────────────────────────
-  //  GitHub Secrets encryption (libsodium sealed box via tweetnacl)
+  //  GitHub Secrets encryption (libsodium crypto_box_seal)
   // ──────────────────────────────────────────────
-  function base64Decode(str) {
-    return Uint8Array.from(atob(str), c => c.charCodeAt(0));
-  }
-
-  function base64Encode(bytes) {
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    return btoa(binary);
-  }
-
-  function sealedBoxNonce(ephemeralPk, recipientPk) {
-    const combined = new Uint8Array(ephemeralPk.length + recipientPk.length);
-    combined.set(ephemeralPk);
-    combined.set(recipientPk, ephemeralPk.length);
-    return nacl.hash(combined).slice(0, nacl.box.nonceLength);
-  }
-
-  function sealedBox(publicKey, message) {
-    const ephemeral = nacl.box.keyPair();
-    const nonce = sealedBoxNonce(ephemeral.publicKey, publicKey);
-    const encrypted = nacl.box(message, nonce, publicKey, ephemeral.secretKey);
-    const result = new Uint8Array(ephemeral.publicKey.length + encrypted.length);
-    result.set(ephemeral.publicKey);
-    result.set(encrypted, ephemeral.publicKey.length);
-    return result;
-  }
-
-  function encryptSecret(base64PublicKey, plaintext) {
-    const publicKeyBytes = base64Decode(base64PublicKey);
-    const msgBytes = new TextEncoder().encode(plaintext);
-    return base64Encode(sealedBox(publicKeyBytes, msgBytes));
+  async function encryptSecret(base64PublicKey, plaintext) {
+    await sodium.ready;
+    const publicKeyBytes = sodium.from_base64(base64PublicKey, sodium.base64_variants.ORIGINAL);
+    const messageBytes = sodium.from_string(plaintext);
+    const encryptedBytes = sodium.crypto_box_seal(messageBytes, publicKeyBytes);
+    return sodium.to_base64(encryptedBytes, sodium.base64_variants.ORIGINAL);
   }
 
   // ──────────────────────────────────────────────
@@ -196,7 +171,7 @@
 
   async function putSecret(cfg, secretName, secretValue) {
     const { key, key_id } = await getPublicKey(cfg);
-    const encrypted_value = encryptSecret(key, secretValue);
+    const encrypted_value = await encryptSecret(key, secretValue);
 
     let url;
     if (cfg.environmentName) {

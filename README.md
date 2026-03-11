@@ -636,6 +636,12 @@ Tampermonkey 会自动识别并弹出安装确认页面。
 
 ### 2026-03-11
 
+#### v1.4 - 加密实现修复
+
+- **修复 GitHub Secrets 加密 bug**：原先用 TweetNaCl 手动模拟 sealed box，nonce 由 `nacl.hash`（SHA-512）派生，而 GitHub 的 libsodium `crypto_box_seal` 使用 Blake2b，二者不兼容，导致加密结果无效、 secret 推送失败。现改用 `libsodium-wrappers`，通过 `sodium.crypto_box_seal()` 实现正确的 sealed box 加密。
+- Chrome 扩展：引入 `libsodium-wrappers.min.js`，替换 `tweetnacl.min.js`
+- Tampermonkey：`@require` 改为 `libsodium-wrappers`，弃用 TweetNaCl
+
 #### v1.3 - Secret 命名规范统一
 
 - **统一 Secret 命名格式为 `{api_user}_{PROVIDER}`**：`api_user` 是各平台内部自增 ID，不同平台间可能重复（如平台 A 和平台 B 都有 ID 为 111111 的用户），因此不能单独用 `api_user` 作为 secret 后缀，必须加上平台标识才能唯一区分
