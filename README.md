@@ -528,6 +528,70 @@ uv run pytest tests/ --cov=.
 3. 选择对应仓库，权限中启用 **Secrets** 的 Read and Write 权限
 4. 生成后复制 token 到扩展配置中
 
+## Tampermonkey 脚本：AnyRouter Cookie Updater
+
+除 Chrome 扩展外，本项目还提供 Tampermonkey 油猴脚本版本 `anyrouter-cookie-updater.user.js`，无需安装扩展，在任意支持油猴的浏览器（Chrome / Firefox / Edge / Safari）中均可使用。
+
+### 安装方式
+
+**方式一：直接安装（推荐）**
+
+安装 [Tampermonkey](https://www.tampermonkey.net/) 后，直接打开本仓库中的脚本文件：
+
+```
+anyrouter-cookie-updater.user.js
+```
+
+Tampermonkey 会自动识别并弹出安装确认页面。
+
+**方式二：手动新建**
+
+1. 打开 Tampermonkey 管理面板 → "添加新脚本"
+2. 将 `anyrouter-cookie-updater.user.js` 的内容完整粘贴进去，保存
+
+### 添加更多站点
+
+脚本顶部的 `@match` 指令控制脚本在哪些站点生效。如需支持其他 NewAPI/OneAPI 站点，在 Tampermonkey 编辑器中追加 `@match` 行：
+
+```js
+// @match        https://your-custom-site.com/*
+```
+
+### 使用方法
+
+访问任意已匹配的站点（需已登录），点击浏览器工具栏中的 Tampermonkey 图标，可看到以下菜单命令：
+
+| 命令 | 说明 |
+| --- | --- |
+| ⚙️ 设置 / 账号配置 | 打开配置面板，填写 GitHub 信息和账号列表 |
+| 🔄 立即同步本站 | 提取当前站点的 cookie 并推送到对应 secret |
+| 🔄 同步所有账号 | 遍历所有已配置账号逐个同步 |
+| 📋 查看日志 | 查看最近 80 条操作日志 |
+
+### 配置面板
+
+与 Chrome 扩展相同，支持**列表模式**和 **JSON 模式**两种账号输入方式，点击顶部 Tab 切换，数据互相同步。
+
+配置项说明：
+
+| 配置项 | 说明 |
+| --- | --- |
+| **GitHub PAT** | 同 Chrome 扩展，需要 Secrets 写入权限 |
+| **仓库 Owner / 仓库名称** | 你 Fork 的仓库信息 |
+| **Environment 名称** | 如 `production`，留空则推送到 repository secrets |
+| **账号列表** | 同 Chrome 扩展，`domain` 必填，其余可选 |
+| **自动同步间隔（分钟）** | 设为 0 关闭自动同步；大于 0 时，每次页面加载会检查距上次同步时间是否超过该间隔，若超过则自动同步 |
+
+### Chrome 扩展 vs 油猴脚本对比
+
+| 特性 | Chrome 扩展 | 油猴脚本 |
+| --- | --- | --- |
+| 支持浏览器 | Chrome / Edge | Chrome / Firefox / Edge / Safari 等 |
+| 需要开发者模式 | ✅ 是（未上架应用商店） | ❌ 否 |
+| 定时触发 | ✅ 后台 alarm，浏览器关闭也会触发 | ⚠️ 页面加载时检查，需要访问对应站点 |
+| 操作界面 | 扩展弹窗 | 页面内悬浮面板 + 油猴菜单 |
+| 跨站点 cookie | ✅ 可读任意域名 | ⚠️ 需在对应站点页面上运行 |
+
 ## 免责声明
 
 本脚本仅用于学习和研究目的，使用前请确保遵守相关网站的使用条款.
@@ -535,6 +599,11 @@ uv run pytest tests/ --cov=.
 ## 开发日志
 
 ### 2026-03-11
+
+#### v1.2 - Tampermonkey 脚本
+
+- **Tampermonkey 油猴脚本**：新增 `anyrouter-cookie-updater.user.js`，功能与 Chrome 扩展对等，支持所有主流浏览器，通过 `GM_cookie` 读取 cookie，通过 `GM_xmlhttpRequest` 跨域调用 GitHub API，通过 `GM_registerMenuCommand` 注册油猴菜单命令，内置同款设置面板（列表/JSON 双模式）和日志查看器
+- 自动同步支持基于页面加载的间隔检查（`GM_setValue` 记录上次同步时间）
 
 #### v1.1 - Chrome 扩展体验优化
 
