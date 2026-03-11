@@ -2,38 +2,53 @@
 
 let currentMode = 'list'; // 'list' | 'json'
 
+// Provider → domain mapping for import
+const PROVIDER_DOMAINS = {
+  anyrouter:    'https://anyrouter.top',
+  agentrouter:  'https://agentrouter.org',
+  freestyle:    'https://api.freestyle.cc.cd',
+  xingyungept:  'https://ai.xingyungept.cn',
+  sorai:        'https://newapi.sorai.me',
+  apikey:       'https://welfare.apikey.cc',
+};
+
 document.addEventListener('DOMContentLoaded', async () => {
   const config = await chrome.storage.sync.get([
     'githubToken', 'repoOwner', 'repoName', 'environmentName', 'accounts', 'refreshInterval'
   ]);
 
-  // Fill GitHub fields
   setVal('githubToken', config.githubToken || '');
-  setVal('repoOwner', config.repoOwner || '');
-  setVal('repoName', config.repoName || 'anyrouter-check-in');
+  setVal('repoOwner',   config.repoOwner   || '');
+  setVal('repoName',    config.repoName    || 'anyrouter-check-in');
   setVal('environmentName', config.environmentName !== undefined ? config.environmentName : 'production');
   if (config.refreshInterval) setVal('refreshInterval', config.refreshInterval);
 
-  // Load accounts
   let accounts = [];
   try {
-    accounts = config.accounts ? (typeof config.accounts === 'string' ? JSON.parse(config.accounts) : config.accounts) : [];
+    accounts = config.accounts
+      ? (typeof config.accounts === 'string' ? JSON.parse(config.accounts) : config.accounts)
+      : [];
   } catch { accounts = []; }
 
   renderList(accounts);
   renderJson(accounts);
 
-  // Tab switching
   document.getElementById('tabList').addEventListener('click', () => switchTab('list'));
   document.getElementById('tabJson').addEventListener('click', () => switchTab('json'));
-
-  document.getElementById('addAccountBtn').addEventListener('click', () => {
-    addAccountItem({});
-  });
-
+  document.getElementById('addAccountBtn').addEventListener('click', () => addAccountItem({}));
   document.getElementById('saveBtn').addEventListener('click', save);
   document.getElementById('syncBtn').addEventListener('click', syncNow);
   document.getElementById('logsBtn').addEventListener('click', () => { window.location.href = 'logs.html'; });
+  document.getElementById('importBtn').addEventListener('click', openImportDialog);
+
+  // Live JSON validation
+  document.getElementById('jsonTextarea').addEventListener('input', () => {
+    const raw = document.getElementById('jsonTextarea').value.trim();
+    const errEl = document.getElementById('jsonErr');
+    if (!raw) { errEl.style.display = 'none'; return; }
+    try { JSON.parse(raw); errEl.style.display = 'none'; }
+    catch { errEl.style.display = 'block'; }
+  });
 });
 
 // ---- Tab switch ----
@@ -42,7 +57,6 @@ function switchTab(mode) {
   if (mode === currentMode) return;
 
   if (mode === 'json') {
-    // Collect from list → update JSON textarea
     const accounts = collectFromList();
     renderJson(accounts);
     document.getElementById('listMode').style.display = 'none';
@@ -50,17 +64,25 @@ function switchTab(mode) {
     document.getElementById('tabList').classList.remove('active');
     document.getElementById('tabJson').classList.add('active');
   } else {
-    // Parse JSON → render list
-    const accounts = collectFromJson();
-    if (accounts === null) {
-      showStatus('JSON 格式有误，无法切换到列表模式', 'error');
-      return;
+    // Treat empty textarea as empty array — no JSON error on blank
+    const raw = document.getElementById('jsonTextarea').value.trim();
+    let accounts = [];
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) throw new Error();
+        accounts = parsed;
+      } catch {
+        showStatus('JSON 格式有误，无法切换到列表模式', 'error');
+        return;
+      }
     }
     renderList(accounts);
     document.getElementById('jsonMode').style.display = 'none';
     document.getElementById('listMode').style.display = '';
     document.getElementById('tabJson').classList.remove('active');
     document.getElementById('tabList').classList.add('active');
+    document.getElementById('jsonErr').style.display = 'none';
   }
   currentMode = mode;
 }
@@ -79,9 +101,11 @@ function renderList(accounts) {
 
 function addAccountItem(data = {}) {
   const list = document.getElementById('accountList');
-  const idx = list.children.length + 1;
+  const idx  = list.children.length + 1;
   const item = document.createElement('div');
   item.className = 'account-item';
+  // cookie_name defaults to 'session', no extra label text needed
+  const cookieNameVal = esc(data.cookie_name || 'session');
   item.innerHTML = `
     <div class="account-item-header">
       <span class="account-item-label">账号 ${idx}</span>
@@ -93,9 +117,9 @@ function addAccountItem(data = {}) {
         <input type="text" class="f-domain" placeholder="https://anyrouter.top" value="${esc(data.domain || '')}">
       </div>
       <div class="field-wrap">
-          <label>cookie_name <span style="font-weight:400;color:#8b949e">（留空默认 session）</span></label>
-          <input type="text" class="f-cookie_name" placeholder="session" value="${esc(data.cookie_name || '')}">
-        </div>
+        <label>cookie_name</label>
+        <input type="text" class="f-cookie_name" placeholder="session" value="${cookieNameVal}">
+      </div>
     </div>
     <div class="account-row">
       <div class="field-wrap">
@@ -123,40 +147,34 @@ function reindexList() {
 }
 
 function collectFromList() {
-  const items = document.querySelectorAll('.account-item');
-  const accounts = [];
-  items.forEach(item => {
+  return Array.from(document.querySelectorAll('.account-item')).map(item => {
     const domain = item.querySelector('.f-domain').value.trim();
-    if (!domain) return;
+    if (!domain) return null;
     const entry = { domain };
-    const api_user = item.querySelector('.f-api_user').value.trim();
+    const api_user      = item.querySelector('.f-api_user').value.trim();
     const env_key_suffix = item.querySelector('.f-env_key_suffix').value.trim();
-    const cookie_name = item.querySelector('.f-cookie_name').value.trim();
-    if (api_user) entry.api_user = api_user;
+    const cookie_name   = item.querySelector('.f-cookie_name').value.trim();
+    if (api_user)       entry.api_user       = api_user;
     if (env_key_suffix) entry.env_key_suffix = env_key_suffix;
-    if (cookie_name) entry.cookie_name = cookie_name;
-    accounts.push(entry);
-  });
-  return accounts;
+    // Only write cookie_name if it differs from the default
+    if (cookie_name && cookie_name !== 'session') entry.cookie_name = cookie_name;
+    return entry;
+  }).filter(Boolean);
 }
 
 // ---- JSON mode ----
 
 function renderJson(accounts) {
-  const ta = document.getElementById('jsonTextarea');
+  const ta    = document.getElementById('jsonTextarea');
   const errEl = document.getElementById('jsonErr');
-  // Only set value if there's real data — keep placeholder visible when empty
-  if (accounts && accounts.length > 0) {
-    ta.value = JSON.stringify(accounts, null, 2);
-  } else {
-    ta.value = '';
-  }
+  ta.value = (accounts && accounts.length > 0) ? JSON.stringify(accounts, null, 2) : '';
   errEl.style.display = 'none';
 }
 
 function collectFromJson() {
-  const raw = document.getElementById('jsonTextarea').value.trim();
+  const raw   = document.getElementById('jsonTextarea').value.trim();
   const errEl = document.getElementById('jsonErr');
+  if (!raw) { errEl.style.display = 'none'; return []; }
   try {
     const data = JSON.parse(raw);
     if (!Array.isArray(data)) throw new Error('not array');
@@ -168,34 +186,148 @@ function collectFromJson() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  // Live JSON validation
-  const ta = document.getElementById('jsonTextarea');
-  if (ta) {
-    ta.addEventListener('input', () => {
-      const raw = ta.value.trim();
-      const errEl = document.getElementById('jsonErr');
-      try { JSON.parse(raw); errEl.style.display = 'none'; } catch { errEl.style.display = 'block'; }
-    });
-  }
-});
+// ---- Import from ANYROUTER_ACCOUNTS ----
+
+function openImportDialog() {
+  if (document.getElementById('importOverlay')) return;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'importOverlay';
+  overlay.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;
+    display:flex;align-items:center;justify-content:center;
+  `;
+
+  const box = document.createElement('div');
+  box.style.cssText = `
+    background:#fff;border-radius:8px;padding:18px;width:440px;max-width:95vw;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;color:#24292f;
+    box-shadow:0 8px 32px rgba(0,0,0,.2);
+  `;
+  box.innerHTML = `
+    <div style="font-weight:700;font-size:14px;margin-bottom:10px">
+      📥 从 ANYROUTER_ACCOUNTS 导入
+    </div>
+    <div style="font-size:11px;color:#57606a;margin-bottom:8px;line-height:1.5">
+      粘贴 GitHub Secrets 中 <strong>ANYROUTER_ACCOUNTS</strong> 的 JSON 内容（支持多行），
+      脚本将自动解析 cookies.session + api_user + provider，转换为本插件所需格式。
+    </div>
+    <textarea id="importTa" style="
+      width:100%;min-height:120px;padding:7px 9px;border:1px solid #d0d7de;border-radius:5px;
+      font-family:monospace;font-size:11px;resize:vertical;box-sizing:border-box;background:#f6f8fa;
+    " placeholder='[
+  {"cookies":{"session":"..."},"api_user":"123456"},
+  {"cookies":{"session":"..."},"api_user":"789012","provider":"agentrouter"}
+]'></textarea>
+    <div id="importErr" style="font-size:11px;color:#cf222e;margin-top:4px;display:none">⚠ JSON 格式错误</div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button id="importConfirmBtn" style="
+        flex:1;padding:7px;background:#0969da;color:#fff;border:none;border-radius:6px;
+        font-size:13px;font-weight:500;cursor:pointer;
+      ">导入并覆盖当前账号</button>
+      <button id="importMergeBtn" style="
+        flex:1;padding:7px;background:#2da44e;color:#fff;border:none;border-radius:6px;
+        font-size:13px;font-weight:500;cursor:pointer;
+      ">导入并合并（去重）</button>
+      <button id="importCancelBtn" style="
+        padding:7px 14px;background:#f6f8fa;border:1px solid #d0d7de;border-radius:6px;
+        font-size:13px;cursor:pointer;
+      ">取消</button>
+    </div>
+  `;
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  box.querySelector('#importCancelBtn').addEventListener('click', () => overlay.remove());
+
+  const doImport = (merge) => {
+    const raw = box.querySelector('#importTa').value.trim();
+    const errEl = box.querySelector('#importErr');
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) throw new Error();
+      errEl.style.display = 'none';
+    } catch {
+      errEl.style.display = 'block';
+      return;
+    }
+
+    const imported = convertFromAnyRouterAccounts(parsed);
+    if (imported.length === 0) {
+      errEl.textContent = '未能解析出任何有效账号（需要 cookies.session 字段）';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    let final = imported;
+    if (merge) {
+      const existing = currentMode === 'list' ? collectFromList() : (collectFromJson() || []);
+      // Deduplicate by api_user, imported takes precedence
+      const byApiUser = {};
+      [...existing, ...imported].forEach(a => {
+        const key = a.api_user || a.domain;
+        byApiUser[key] = a;
+      });
+      final = Object.values(byApiUser);
+    }
+
+    overlay.remove();
+
+    if (currentMode === 'list') {
+      renderList(final);
+    } else {
+      renderJson(final);
+    }
+    showStatus(`✅ 已导入 ${imported.length} 个账号${merge ? '（已合并去重）' : ''}`, 'success');
+  };
+
+  box.querySelector('#importConfirmBtn').addEventListener('click', () => doImport(false));
+  box.querySelector('#importMergeBtn').addEventListener('click',  () => doImport(true));
+}
+
+/**
+ * Convert ANYROUTER_ACCOUNTS format to plugin format.
+ * Input:  [{cookies:{session:"..."}, api_user:"xxx", provider:"anyrouter"}, ...]
+ * Output: [{domain:"https://...", api_user:"xxx"}, ...]
+ */
+function convertFromAnyRouterAccounts(items) {
+  return items.map(item => {
+    const sessionCookie = item?.cookies?.session;
+    if (!sessionCookie) return null;
+
+    const provider = item.provider || 'anyrouter';
+    const domain   = PROVIDER_DOMAINS[provider] || null;
+    if (!domain) return null;
+
+    const entry = { domain };
+    if (item.api_user) entry.api_user = String(item.api_user);
+    // env_key_suffix: provider_apiuser for non-default providers, just apiuser for anyrouter
+    if (item.api_user) {
+      entry.env_key_suffix = provider !== 'anyrouter'
+        ? `${item.api_user}_${provider.toUpperCase()}`
+        : String(item.api_user);
+    }
+    // Store the actual session value so background.js can use it directly
+    // (no need to re-extract from browser if we already have it)
+    entry._imported_session = sessionCookie;
+    return entry;
+  }).filter(Boolean);
+}
 
 // ---- Collect accounts from current mode ----
 
 function collectAccounts() {
-  if (currentMode === 'json') {
-    return collectFromJson();
-  } else {
-    return collectFromList();
-  }
+  return currentMode === 'json' ? collectFromJson() : collectFromList();
 }
 
 // ---- Save ----
 
 async function save() {
-  const githubToken = getVal('githubToken');
-  const repoOwner = getVal('repoOwner');
-  const repoName = getVal('repoName') || 'anyrouter-check-in';
+  const githubToken    = getVal('githubToken');
+  const repoOwner      = getVal('repoOwner');
+  const repoName       = getVal('repoName') || 'anyrouter-check-in';
   const environmentName = getVal('environmentName');
   const refreshInterval = parseInt(document.getElementById('refreshInterval').value) || 360;
 
@@ -244,9 +376,8 @@ function setVal(id, v) {
   if (el) el.value = v;
 }
 function esc(s) {
-  return String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
-
 function showStatus(message, type) {
   const el = document.getElementById('status');
   el.textContent = message;

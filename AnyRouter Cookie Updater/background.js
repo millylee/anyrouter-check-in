@@ -122,25 +122,33 @@ async function syncOneAccount(config, account) {
   const label = env_key_suffix || api_user || domain;
 
   try {
-    await Logger.info(`Extracting cookie "${targetCookieName}" for ${label}`, { domain });
+    let cookieValue = account._imported_session || null;
 
-    const url = domain.replace(/\/$/, '');
-    const cookies = await chrome.cookies.getAll({ url });
-    const cookie = cookies.find(c => c.name === targetCookieName);
+    if (cookieValue) {
+      // Use the pre-imported cookie value directly (from ANYROUTER_ACCOUNTS import)
+      await Logger.info(`Using imported cookie for ${label}`, { source: 'import' });
+    } else {
+      await Logger.info(`Extracting cookie "${targetCookieName}" for ${label}`, { domain });
 
-    if (!cookie) {
-      await Logger.error(`Cookie "${targetCookieName}" not found for ${label}`, {
-        available: cookies.map(c => c.name)
-      });
-      return { success: false, label, error: `cookie "${targetCookieName}" not found` };
+      const url = domain.replace(/\/$/, '');
+      const cookies = await chrome.cookies.getAll({ url });
+      const cookie = cookies.find(c => c.name === targetCookieName);
+
+      if (!cookie) {
+        await Logger.error(`Cookie "${targetCookieName}" not found for ${label}`, {
+          available: cookies.map(c => c.name)
+        });
+        return { success: false, label, error: `cookie "${targetCookieName}" not found` };
+      }
+
+      cookieValue = cookie.value;
+      await Logger.success(`Cookie extracted for ${label}`, { length: cookieValue.length });
     }
-
-    await Logger.success(`Cookie extracted for ${label}`, { length: cookie.value.length });
 
     // Auto-resolve api_user if not provided
     if (!api_user) {
       await Logger.info(`api_user not set for ${label}, fetching from /api/user/self...`);
-      api_user = await fetchApiUser(domain, targetCookieName, cookie.value);
+      api_user = await fetchApiUser(domain, targetCookieName, cookieValue);
       if (api_user) {
         await Logger.success(`Auto-resolved api_user: ${api_user}`);
       } else {
@@ -157,7 +165,7 @@ async function syncOneAccount(config, account) {
 
     const secretName = `ANYROUTER_ACCOUNT_${secretSuffix}`;
     const secretValue = JSON.stringify({
-      cookies: { [targetCookieName]: cookie.value },
+      cookies: { [targetCookieName]: cookieValue },
       ...(api_user ? { api_user } : {})
     });
 

@@ -280,15 +280,19 @@
     const label = env_key_suffix || api_user || domain;
 
     try {
-      log.info(`Extracting cookie "${targetCookieName}" for ${label}`);
+      let cookieValue = account._imported_session || null;
 
-      const cookieValue = await getCookieValue(domain, targetCookieName);
-      if (!cookieValue) {
-        log.error(`Cookie "${targetCookieName}" not found for ${label}`, { domain });
-        return { success: false, label, error: `cookie not found` };
+      if (cookieValue) {
+        log.info(`Using imported cookie for ${label}`, { source: 'import' });
+      } else {
+        log.info(`Extracting cookie "${targetCookieName}" for ${label}`);
+        cookieValue = await getCookieValue(domain, targetCookieName);
+        if (!cookieValue) {
+          log.error(`Cookie "${targetCookieName}" not found for ${label}`, { domain });
+          return { success: false, label, error: `cookie not found` };
+        }
+        log.success(`Cookie extracted for ${label}`, { length: cookieValue.length });
       }
-
-      log.success(`Cookie extracted for ${label}`, { length: cookieValue.length });
 
       if (!api_user) {
         log.info(`Fetching api_user from /api/user/self for ${label}`);
@@ -324,6 +328,133 @@
   // ──────────────────────────────────────────────
   function notify(text) {
     GM_notification({ title: SCRIPT_NAME, text, timeout: 5000 });
+  }
+
+  // ──────────────────────────────────────────────
+  //  Import from ANYROUTER_ACCOUNTS
+  // ──────────────────────────────────────────────
+  const PROVIDER_DOMAINS = {
+    anyrouter:   'https://anyrouter.top',
+    agentrouter: 'https://agentrouter.org',
+    freestyle:   'https://api.freestyle.cc.cd',
+    xingyungept: 'https://ai.xingyungept.cn',
+    sorai:       'https://newapi.sorai.me',
+    apikey:      'https://welfare.apikey.cc',
+  };
+
+  function convertFromAnyRouterAccounts(items) {
+    return items.map(item => {
+      const sessionCookie = item?.cookies?.session;
+      if (!sessionCookie) return null;
+      const provider = item.provider || 'anyrouter';
+      const domain = PROVIDER_DOMAINS[provider] || null;
+      if (!domain) return null;
+      const entry = { domain };
+      if (item.api_user) {
+        entry.api_user = String(item.api_user);
+        entry.env_key_suffix = provider !== 'anyrouter'
+          ? `${item.api_user}_${provider.toUpperCase()}`
+          : String(item.api_user);
+      }
+      entry._imported_session = sessionCookie;
+      return entry;
+    }).filter(Boolean);
+  }
+
+  function openImportDialog(parentPanel) {
+    if (document.getElementById('arc-import-overlay')) return;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'arc-import-overlay';
+    overlay.style.cssText = `
+      position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2147483647;
+      display:flex;align-items:center;justify-content:center;
+    `;
+
+    const box = document.createElement('div');
+    box.style.cssText = `
+      background:#fff;border-radius:8px;padding:18px;width:460px;max-width:95vw;
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;color:#24292f;
+      box-shadow:0 8px 32px rgba(0,0,0,.25);
+    `;
+    box.innerHTML = `
+      <div style="font-weight:700;font-size:14px;margin-bottom:10px">📥 从 ANYROUTER_ACCOUNTS 导入</div>
+      <div style="font-size:11px;color:#57606a;margin-bottom:8px;line-height:1.5">
+        粘贴 <strong>ANYROUTER_ACCOUNTS</strong> 的 JSON 内容（支持多行），
+        自动解析 cookies.session + api_user + provider，转换为本脚本所需格式。
+      </div>
+      <textarea id="arc-import-ta" style="
+        width:100%;min-height:120px;padding:7px 9px;border:1px solid #d0d7de;border-radius:5px;
+        font-family:monospace;font-size:11px;resize:vertical;box-sizing:border-box;background:#f6f8fa;
+      " placeholder='[
+  {"cookies":{"session":"..."},"api_user":"123456"},
+  {"cookies":{"session":"..."},"api_user":"789012","provider":"agentrouter"}
+]'></textarea>
+      <div id="arc-import-err" style="font-size:11px;color:#cf222e;margin-top:4px;display:none">⚠ JSON 格式错误</div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button id="arc-import-confirm" style="
+          flex:1;padding:7px;background:#0969da;color:#fff;border:none;border-radius:6px;
+          font-size:13px;font-weight:500;cursor:pointer;
+        ">导入并覆盖</button>
+        <button id="arc-import-merge" style="
+          flex:1;padding:7px;background:#2da44e;color:#fff;border:none;border-radius:6px;
+          font-size:13px;font-weight:500;cursor:pointer;
+        ">导入并合并（去重）</button>
+        <button id="arc-import-cancel" style="
+          padding:7px 14px;background:#f6f8fa;border:1px solid #d0d7de;border-radius:6px;
+          font-size:13px;cursor:pointer;
+        ">取消</button>
+      </div>
+    `;
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    box.querySelector('#arc-import-cancel').addEventListener('click', () => overlay.remove());
+
+    const doImport = (merge) => {
+      const raw = box.querySelector('#arc-import-ta').value.trim();
+      const errEl = box.querySelector('#arc-import-err');
+      let parsed;
+      try {
+        parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) throw new Error();
+        errEl.style.display = 'none';
+      } catch {
+        errEl.style.display = 'block';
+        return;
+      }
+
+      const imported = convertFromAnyRouterAccounts(parsed);
+      if (imported.length === 0) {
+        errEl.textContent = '未能解析出有效账号（需要 cookies.session 字段）';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      let final = imported;
+      if (merge) {
+        const existing = panelMode === 'list' ? collectFromList() : (collectFromJson(parentPanel) || []);
+        const byKey = {};
+        [...existing, ...imported].forEach(a => { byKey[a.api_user || a.domain] = a; });
+        final = Object.values(byKey);
+      }
+
+      overlay.remove();
+
+      if (panelMode === 'list') {
+        const list = parentPanel.querySelector('#arc-account-list');
+        list.innerHTML = '';
+        final.forEach(a => addAccountItem(a));
+      } else {
+        const ta = parentPanel.querySelector('#arc-json-ta');
+        if (ta) ta.value = JSON.stringify(final, null, 2);
+      }
+      arcStatus(`✅ 已导入 ${imported.length} 个账号${merge ? '（已合并去重）' : ''}`, 'ok');
+    };
+
+    box.querySelector('#arc-import-confirm').addEventListener('click', () => doImport(false));
+    box.querySelector('#arc-import-merge').addEventListener('click',  () => doImport(true));
   }
 
   // ──────────────────────────────────────────────
@@ -372,6 +503,10 @@
     .arc-btn-blue:hover { background: #0860ca; }
     .arc-btn-grey { background: #f6f8fa; border-color: #d0d7de; color: #24292f; }
     .arc-btn-grey:hover { background: #eaeef2; }
+    .arc-btn-purple { background: #8250df; color: #fff; }
+    .arc-btn-purple:hover { background: #6639ba; }
+    .arc-btn-orange { background: #bc4c00; color: #fff; }
+    .arc-btn-orange:hover { background: #953d00; }
     .arc-status { padding: 7px 10px; border-radius: 5px; font-size: 12px; margin-top: 8px; display: none; }
     .arc-status.ok { background: #dafbe1; color: #116329; border: 1px solid #aceebb; }
     .arc-status.err { background: #ffebe9; color: #82071e; border: 1px solid #ffcecb; }
@@ -460,7 +595,10 @@
         </div>
         <div id="arc-json-mode" style="display:${panelMode === 'json' ? '' : 'none'}">
           <div class="arc-field">
-            <textarea id="arc-json-ta">${esc(JSON.stringify(accounts, null, 2))}</textarea>
+            <textarea id="arc-json-ta" placeholder='[
+  { "domain": "https://anyrouter.top" },
+  { "domain": "https://agentrouter.org", "api_user": "789012" }
+]'>${accounts.length > 0 ? esc(JSON.stringify(accounts, null, 2)) : ''}</textarea>
           </div>
           <div class="arc-json-err" id="arc-json-err">⚠ JSON 格式错误</div>
           <div class="arc-hint" style="margin-top:4px">
@@ -484,7 +622,8 @@
         <button class="arc-btn arc-btn-green" id="arc-save">💾 保存</button>
         <button class="arc-btn arc-btn-blue" id="arc-sync-cur">🔄 同步本站</button>
         <button class="arc-btn arc-btn-blue" id="arc-sync-all">🔄 同步全部</button>
-        <button class="arc-btn arc-btn-grey" id="arc-logs-btn">📋 日志</button>
+        <button class="arc-btn arc-btn-orange" id="arc-import-btn">📥 导入</button>
+        <button class="arc-btn arc-btn-purple" id="arc-logs-btn">📋 日志</button>
         <button class="arc-btn arc-btn-grey" id="arc-close">✕ 关闭</button>
       </div>
       <div class="arc-status" id="arc-status"></div>
@@ -521,6 +660,7 @@
       renderPanel(panel);
     });
     panel.querySelector('#arc-close').addEventListener('click', closePanel);
+    panel.querySelector('#arc-import-btn').addEventListener('click', () => openImportDialog(panel));
   }
 
   function renderLogsView(panel, cfg) {
@@ -556,6 +696,7 @@
     const idx = list.children.length + 1;
     const item = document.createElement('div');
     item.className = 'arc-item';
+    const cookieNameVal = esc(data.cookie_name || 'session');
     item.innerHTML = `
       <div class="arc-item-hdr">
         <span class="arc-item-lbl">账号 ${idx}</span>
@@ -568,7 +709,7 @@
         </div>
         <div class="arc-field">
           <label>cookie_name</label>
-          <input type="text" class="f-cookie_name" placeholder="session" value="${esc(data.cookie_name || '')}">
+          <input type="text" class="f-cookie_name" placeholder="session" value="${cookieNameVal}">
         </div>
       </div>
       <div class="arc-row">
@@ -594,20 +735,31 @@
     if (mode === 'json') {
       const accounts = collectFromList();
       const ta = panel.querySelector('#arc-json-ta');
-      if (ta) ta.value = JSON.stringify(accounts, null, 2);
+      if (ta) ta.value = accounts.length > 0 ? JSON.stringify(accounts, null, 2) : '';
       panel.querySelector('#arc-list-mode').style.display = 'none';
       panel.querySelector('#arc-json-mode').style.display = '';
       panel.querySelector('#arc-tab-list').classList.remove('active');
       panel.querySelector('#arc-tab-json').classList.add('active');
     } else {
-      const accounts = collectFromJson(panel);
-      if (accounts === null) { arcStatus('JSON 格式有误，无法切换', 'err'); return; }
+      const raw = (panel.querySelector('#arc-json-ta') || {}).value || '';
+      let accounts = [];
+      if (raw.trim()) {
+        try {
+          const parsed = JSON.parse(raw.trim());
+          if (!Array.isArray(parsed)) throw new Error();
+          accounts = parsed;
+        } catch {
+          arcStatus('JSON 格式有误，无法切换', 'err');
+          return;
+        }
+      }
       panel.querySelector('#arc-account-list').innerHTML = '';
       accounts.forEach(a => addAccountItem(a));
       panel.querySelector('#arc-json-mode').style.display = 'none';
       panel.querySelector('#arc-list-mode').style.display = '';
       panel.querySelector('#arc-tab-json').classList.remove('active');
       panel.querySelector('#arc-tab-list').classList.add('active');
+      panel.querySelector('#arc-json-err').style.display = 'none';
     }
     panelMode = mode;
   }
@@ -617,12 +769,13 @@
       const domain = item.querySelector('.f-domain').value.trim();
       if (!domain) return null;
       const entry = { domain };
-      const api_user = item.querySelector('.f-api_user').value.trim();
+      const api_user      = item.querySelector('.f-api_user').value.trim();
       const env_key_suffix = item.querySelector('.f-env_key_suffix').value.trim();
-      const cookie_name = item.querySelector('.f-cookie_name').value.trim();
-      if (api_user) entry.api_user = api_user;
+      const cookie_name   = item.querySelector('.f-cookie_name').value.trim();
+      if (api_user)       entry.api_user       = api_user;
       if (env_key_suffix) entry.env_key_suffix = env_key_suffix;
-      if (cookie_name) entry.cookie_name = cookie_name;
+      // Only persist cookie_name if non-default
+      if (cookie_name && cookie_name !== 'session') entry.cookie_name = cookie_name;
       return entry;
     }).filter(Boolean);
   }
@@ -630,8 +783,10 @@
   function collectFromJson(panel) {
     const ta = (panel || document).querySelector('#arc-json-ta');
     if (!ta) return [];
+    const raw = ta.value.trim();
+    if (!raw) { (panel || document).querySelector('#arc-json-err').style.display = 'none'; return []; }
     try {
-      const data = JSON.parse(ta.value.trim());
+      const data = JSON.parse(raw);
       if (!Array.isArray(data)) throw new Error();
       (panel || document).querySelector('#arc-json-err').style.display = 'none';
       return data;
@@ -644,7 +799,9 @@
   function validateJson(panel) {
     const ta = panel.querySelector('#arc-json-ta');
     const err = panel.querySelector('#arc-json-err');
-    try { JSON.parse(ta.value.trim()); err.style.display = 'none'; }
+    const raw = ta.value.trim();
+    if (!raw) { err.style.display = 'none'; return; }
+    try { JSON.parse(raw); err.style.display = 'none'; }
     catch { err.style.display = 'block'; }
   }
 
