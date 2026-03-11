@@ -8,48 +8,89 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       width: 480px;
-      padding: 20px;
+      padding: 16px 18px 18px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 13px;
       color: #24292f;
       background: #f6f8fa;
     }
-    h1 { font-size: 17px; margin-bottom: 14px; color: #0969da; }
-    .section { background: #fff; border: 1px solid #d0d7de; border-radius: 6px; padding: 14px; margin-bottom: 12px; }
-    .section-title { font-size: 13px; font-weight: 600; margin-bottom: 10px; color: #24292f; }
-    .form-group { margin-bottom: 10px; }
-    label { display: block; margin-bottom: 4px; font-weight: 500; color: #57606a; font-size: 12px; }
+    h1 { font-size: 16px; margin-bottom: 12px; color: #0969da; display: flex; align-items: center; gap: 6px; }
+    .section { background: #fff; border: 1px solid #d0d7de; border-radius: 6px; padding: 12px 14px; margin-bottom: 10px; }
+    .section-title { font-size: 12px; font-weight: 600; margin-bottom: 9px; color: #24292f; text-transform: uppercase; letter-spacing: .4px; }
+    .form-group { margin-bottom: 9px; }
+    .form-group:last-child { margin-bottom: 0; }
+    label { display: block; margin-bottom: 3px; font-weight: 500; color: #57606a; font-size: 11px; }
     input[type="text"], input[type="password"], input[type="number"], textarea {
-      width: 100%; padding: 6px 10px; border: 1px solid #d0d7de; border-radius: 6px; font-size: 13px;
-      font-family: inherit; background: #f6f8fa;
+      width: 100%; padding: 5px 9px; border: 1px solid #d0d7de; border-radius: 5px; font-size: 12px;
+      font-family: inherit; background: #f6f8fa; color: #24292f;
     }
-    input:focus, textarea:focus { outline: none; border-color: #0969da; box-shadow: 0 0 0 3px rgba(9,105,218,.15); background: #fff; }
-    textarea { min-height: 100px; resize: vertical; font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace; font-size: 11px; }
-    .hint { font-size: 11px; color: #8b949e; margin-top: 2px; }
-    .btn-row { display: flex; gap: 8px; margin-top: 12px; }
-    button {
-      flex: 1; padding: 8px 12px; border: 1px solid transparent; border-radius: 6px;
-      font-size: 13px; font-weight: 500; cursor: pointer; transition: .15s ease;
+    input:focus, textarea:focus { outline: none; border-color: #0969da; box-shadow: 0 0 0 3px rgba(9,105,218,.12); background: #fff; }
+    textarea { resize: vertical; font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace; font-size: 11px; }
+    .hint { font-size: 10px; color: #8b949e; margin-top: 2px; line-height: 1.5; }
+
+    /* Tab toggle */
+    .tab-bar { display: flex; border: 1px solid #d0d7de; border-radius: 6px; overflow: hidden; margin-bottom: 10px; }
+    .tab { flex: 1; padding: 6px 0; font-size: 12px; font-weight: 500; text-align: center; cursor: pointer; background: #f6f8fa; color: #57606a; border: none; transition: .15s; }
+    .tab.active { background: #0969da; color: #fff; }
+    .tab:not(.active):hover { background: #eaeef2; }
+
+    /* List mode account items */
+    .account-list { display: flex; flex-direction: column; gap: 8px; }
+    .account-item {
+      border: 1px solid #d0d7de; border-radius: 6px; padding: 10px; background: #f6f8fa; position: relative;
     }
-    .btn-primary { background: #2da44e; color: #fff; border-color: rgba(27,31,36,.15); }
-    .btn-primary:hover { background: #218838; }
+    .account-item-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
+    }
+    .account-item-label { font-size: 11px; font-weight: 600; color: #57606a; }
+    .account-item-del {
+      width: 20px; height: 20px; border: none; background: none; cursor: pointer; color: #cf222e;
+      font-size: 14px; line-height: 1; padding: 0; display: flex; align-items: center; justify-content: center;
+      border-radius: 4px;
+    }
+    .account-item-del:hover { background: #ffebe9; }
+    .account-row { display: flex; gap: 6px; margin-bottom: 6px; }
+    .account-row:last-child { margin-bottom: 0; }
+    .account-row input { font-size: 11px; padding: 4px 7px; }
+    .field-wrap { flex: 1; display: flex; flex-direction: column; }
+    .field-wrap label { font-size: 10px; margin-bottom: 2px; }
+    .add-btn {
+      width: 100%; padding: 6px; border: 1px dashed #d0d7de; border-radius: 6px; background: none;
+      color: #57606a; font-size: 12px; cursor: pointer; margin-top: 4px; transition: .15s;
+    }
+    .add-btn:hover { border-color: #0969da; color: #0969da; background: #ddf4ff; }
+
+    /* JSON mode */
+    #jsonTextarea { min-height: 120px; }
+
+    /* Buttons */
+    .btn-row { display: flex; gap: 7px; margin-top: 10px; }
+    button.btn {
+      flex: 1; padding: 7px 10px; border: 1px solid transparent; border-radius: 6px;
+      font-size: 12px; font-weight: 500; cursor: pointer; transition: .15s ease;
+    }
+    .btn-green { background: #2da44e; color: #fff; }
+    .btn-green:hover { background: #218838; }
     .btn-blue { background: #0969da; color: #fff; }
     .btn-blue:hover { background: #0860ca; }
     .btn-outline { background: #f6f8fa; color: #24292f; border-color: #d0d7de; }
     .btn-outline:hover { background: #eaeef2; }
-    .status { margin-top: 10px; padding: 10px; border-radius: 6px; font-size: 12px; display: none; }
+
+    .status { margin-top: 8px; padding: 8px 10px; border-radius: 6px; font-size: 12px; display: none; }
     .status.success { background: #dafbe1; color: #116329; border: 1px solid #aceebb; }
     .status.error { background: #ffebe9; color: #82071e; border: 1px solid #ffcecb; }
     .status.info { background: #ddf4ff; color: #0969da; border: 1px solid #b6e3ff; }
     .info-box {
-      background: #fff8c5; border: 1px solid #d4a72c; border-radius: 6px; padding: 10px;
-      font-size: 11px; color: #6a5304; margin-top: 8px;
+      background: #fff8c5; border: 1px solid #d4a72c; border-radius: 6px; padding: 9px 10px;
+      font-size: 10px; color: #6a5304; margin-top: 8px; line-height: 1.6;
     }
+    .json-err { font-size: 10px; color: #cf222e; margin-top: 3px; display: none; }
   </style>
 </head>
 <body>
   <h1>🔄 AnyRouter Cookie Updater</h1>
 
+  <!-- GitHub Config -->
   <div class="section">
     <div class="section-title">GitHub 配置</div>
     <div class="form-group">
@@ -57,13 +98,15 @@
       <input type="password" id="githubToken" placeholder="ghp_xxxxxxxxxxxx">
       <div class="hint">需要 repo 权限（或 Environment secrets 写入权限）</div>
     </div>
-    <div class="form-group">
-      <label for="repoOwner">仓库 Owner</label>
-      <input type="text" id="repoOwner" placeholder="your-username">
-    </div>
-    <div class="form-group">
-      <label for="repoName">仓库名称</label>
-      <input type="text" id="repoName" placeholder="anyrouter-check-in">
+    <div class="form-row" style="display:flex;gap:8px;">
+      <div class="form-group" style="flex:1">
+        <label for="repoOwner">仓库 Owner</label>
+        <input type="text" id="repoOwner" placeholder="your-username">
+      </div>
+      <div class="form-group" style="flex:1">
+        <label for="repoName">仓库名称</label>
+        <input type="text" id="repoName" placeholder="anyrouter-check-in">
+      </div>
     </div>
     <div class="form-group">
       <label for="environmentName">Environment 名称（可选）</label>
@@ -72,54 +115,55 @@
     </div>
   </div>
 
+  <!-- Accounts Config -->
   <div class="section">
     <div class="section-title">账号配置</div>
-    <div class="form-group">
-      <label for="accounts">账号列表 (JSON 数组)</label>
-      <textarea id="accounts" placeholder='[
-  {
-    "domain": "https://anyrouter.top"
-  },
-  {
-    "domain": "https://agentrouter.org",
-    "env_key_suffix": "789012_AGENTROUTER"
-  }
+
+    <div class="tab-bar">
+      <button class="tab active" id="tabList" type="button">📋 列表模式</button>
+      <button class="tab" id="tabJson" type="button">{ } JSON 模式</button>
+    </div>
+
+    <!-- List mode -->
+    <div id="listMode">
+      <div class="account-list" id="accountList"></div>
+      <button class="add-btn" id="addAccountBtn" type="button">＋ 添加账号</button>
+    </div>
+
+    <!-- JSON mode -->
+    <div id="jsonMode" style="display:none">
+      <textarea id="jsonTextarea" placeholder='[
+  { "domain": "https://anyrouter.top" },
+  { "domain": "https://agentrouter.org", "env_key_suffix": "789012_AGENTROUTER" }
 ]'></textarea>
-      <div class="hint">
-        domain（必填）: 站点地址<br>
-        api_user（可选）: 不填则自动从 /api/user/self 获取<br>
-        env_key_suffix（可选）: secret 后缀，默认用 api_user（生成 ANYROUTER_ACCOUNT_{suffix}）<br>
-        cookie_name（可选）: 默认 "session"
+      <div class="json-err" id="jsonErr">⚠ JSON 格式错误</div>
+      <div class="hint" style="margin-top:4px">
+        domain（必填）· api_user（可选，自动获取）· env_key_suffix（可选，默认用 api_user）· cookie_name（可选，默认 session）
       </div>
     </div>
   </div>
 
+  <!-- Schedule -->
   <div class="section">
     <div class="section-title">定时设置</div>
     <div class="form-group">
       <label for="refreshInterval">同步间隔（分钟）</label>
-      <input type="number" id="refreshInterval" value="360" min="30" max="1440">
-      <div class="hint">建议 360 分钟（6 小时），与签到频率一致</div>
+      <input type="number" id="refreshInterval" value="360" min="30" max="1440" style="width:120px">
+      <div class="hint">建议 360（6 小时），与签到频率一致</div>
     </div>
   </div>
 
   <div class="btn-row">
-    <button class="btn-primary" id="saveBtn">💾 保存配置</button>
-    <button class="btn-blue" id="syncBtn">🔄 立即同步</button>
-  </div>
-  <div class="btn-row">
-    <button class="btn-outline" id="logsBtn" style="width:100%">📋 查看日志</button>
+    <button class="btn btn-green" id="saveBtn">💾 保存</button>
+    <button class="btn btn-blue" id="syncBtn">🔄 立即同步</button>
+    <button class="btn btn-outline" id="logsBtn">📋 日志</button>
   </div>
 
   <div class="status" id="status"></div>
 
   <div class="info-box">
-    <strong>⚡ 工作原理：</strong><br>
-    1. 从浏览器中提取已登录站点的 session cookie<br>
-    2. 通过 GitHub API 加密后推送到 Environment Secrets<br>
-    3. 签到脚本从 ANYROUTER_ACCOUNT_* 读取最新 cookie<br>
-    <br>
-    <strong>⚠️ 前提：</strong>你需要在浏览器中保持各站点的登录状态
+    <strong>⚡ 工作原理：</strong>从浏览器提取 session cookie → 调 /api/user/self 自动获取 api_user → GitHub API 加密推送为 ANYROUTER_ACCOUNT_* Secret → 签到脚本自动读取最新 cookie<br>
+    <strong>⚠️ 前提：</strong>保持各站点登录状态
   </div>
 
   <script src="popup.js"></script>

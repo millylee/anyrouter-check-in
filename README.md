@@ -536,6 +536,16 @@ uv run pytest tests/ --cov=.
 
 ### 2026-03-11
 
+#### v1.1 - Chrome 扩展体验优化
+
+- **双模式账号配置**：Chrome 扩展 AnyRouter Cookie Updater 现支持两种账号输入方式，可随时切换且数据互相同步：
+  - **列表模式**：逐条填写，每个账号有独立的表单行，方便新增、删除和逐字段编辑
+  - **JSON 模式**：批量粘贴 JSON 数组，适合一次性导入多账号，含实时语法校验
+- **api_user 自动获取**：账号配置中 `api_user` 和 `env_key_suffix` 均变为可选字段；扩展在提取 cookie 后会自动调用 `/api/user/self` 接口解析用户 ID，最简配置只需填写 `domain`
+- **扩展图标**：使用项目 `icon.png` 替换临时生成的占位图标
+
+#### v1.0 - 初始版本
+
 - **通知增强**：飞书/通知消息中每个账号现在显示所属平台名称和域名（如 `🌐 平台: freestyle (https://api.freestyle.cc.cd)`），解决了之前通知中不知道 Account 1 对应哪个网站的问题
 - **多行 JSON 支持**：`ANYROUTER_ACCOUNTS` 和 `PROVIDERS` 环境变量支持多行 JSON，无需手动将在线配置生成器的输出压缩为一行
 - **ANYROUTER_ACCOUNT_* 独立账号管理**：参考 [autocheck-anyrouter](https://github.com/rakuyoMo/autocheck-anyrouter) 方案，支持通过 `ANYROUTER_ACCOUNT_` 前缀的环境变量独立管理每个账号的 cookie，某个账号过期时只需更新对应 secret
