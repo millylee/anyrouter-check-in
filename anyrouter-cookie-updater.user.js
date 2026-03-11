@@ -26,8 +26,8 @@
 // @connect      api.github.com
 // @connect      *
 //
-// @require      https://cdn.jsdelivr.net/npm/libsodium@0.7.13/dist/modules/libsodium.min.js
-// @require      https://cdn.jsdelivr.net/npm/libsodium-wrappers@0.7.13/dist/modules/libsodium-wrappers.min.js
+// @require      https://cdn.jsdelivr.net/npm/libsodium@0.7.15/dist/modules/libsodium.min.js
+// @require      https://cdn.jsdelivr.net/npm/libsodium-wrappers@0.7.15/dist/modules/libsodium-wrappers.min.js
 //
 // @run-at       document-idle
 // ==/UserScript==
@@ -118,11 +118,13 @@
   //  GitHub Secrets encryption (libsodium crypto_box_seal)
   // ──────────────────────────────────────────────
   async function encryptSecret(base64PublicKey, plaintext) {
-    const _sodium = await sodium.ready;
-    const publicKeyBytes = _sodium.from_base64(base64PublicKey, _sodium.base64_variants.ORIGINAL);
-    const messageBytes = _sodium.from_string(plaintext);
-    const encryptedBytes = _sodium.crypto_box_seal(messageBytes, publicKeyBytes);
-    return _sodium.to_base64(encryptedBytes, _sodium.base64_variants.ORIGINAL);
+    // libsodium-wrappers UMD sets the global as `sodium` (via `this.sodium`)
+    const _s = (typeof sodium !== 'undefined') ? sodium : self.sodium;
+    await _s.ready;
+    const pk = _s.from_base64(base64PublicKey, _s.base64_variants.ORIGINAL);
+    const msg = _s.from_string(plaintext);
+    const enc = _s.crypto_box_seal(msg, pk);
+    return _s.to_base64(enc, _s.base64_variants.ORIGINAL);
   }
 
   // ──────────────────────────────────────────────

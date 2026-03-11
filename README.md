@@ -638,9 +638,10 @@ Tampermonkey 会自动识别并弹出安装确认页面。
 
 #### v1.4 - 加密实现修复
 
-- **修复 GitHub Secrets 加密 bug**：原先用 TweetNaCl 手动模拟 sealed box，nonce 由 `nacl.hash`（SHA-512）派生，而 GitHub 的 libsodium `crypto_box_seal` 使用 Blake2b，二者不兼容，导致加密结果无效、 secret 推送失败。现改用 `libsodium-wrappers`，通过 `sodium.crypto_box_seal()` 实现正确的 sealed box 加密。
-- Chrome 扩展：引入 `libsodium-wrappers.min.js`，替换 `tweetnacl.min.js`
-- Tampermonkey：`@require` 改为 `libsodium-wrappers`，弃用 TweetNaCl
+- **修复 GitHub Secrets 加密 bug**：原先用 TweetNaCl 手动模拟 sealed box，nonce 由 `nacl.hash`（SHA-512）派生，而 GitHub 的 libsodium `crypto_box_seal` 使用 Blake2b 派生 nonce，二者不兼容导致 GitHub 无法解密推送的 secret。现改用 `libsodium-wrappers`，通过 `sodium.crypto_box_seal()` 实现正确的 sealed box 加密
+- Chrome 扩展：引入 `libsodium.min.js` + `libsodium-wrappers.min.js`，替换 `tweetnacl.min.js`，manifest.json 添加 `wasm-unsafe-eval` CSP
+- Tampermonkey：`@require` 改为 libsodium CDN 版本
+- 修复导入 `_imported_session` 在列表模式保存后丢失的 bug（添加隐藏 input 持久化）
 
 #### v1.3 - Secret 命名规范统一
 

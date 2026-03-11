@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AnyRouter Cookie Updater",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "自动提取 AnyRouter 等平台的 session cookie，推送到 GitHub Actions Environment Secrets",
   "permissions": [
     "cookies",
@@ -13,6 +13,9 @@
     "https://*/*",
     "https://api.github.com/*"
   ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+  },
   "background": {
     "service_worker": "background.js"
   },
