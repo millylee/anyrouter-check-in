@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Fill GitHub fields
   setVal('githubToken', config.githubToken || '');
   setVal('repoOwner', config.repoOwner || '');
-  setVal('repoName', config.repoName || '');
+  setVal('repoName', config.repoName || 'anyrouter-check-in');
   setVal('environmentName', config.environmentName !== undefined ? config.environmentName : 'production');
   if (config.refreshInterval) setVal('refreshInterval', config.refreshInterval);
 
@@ -93,9 +93,9 @@ function addAccountItem(data = {}) {
         <input type="text" class="f-domain" placeholder="https://anyrouter.top" value="${esc(data.domain || '')}">
       </div>
       <div class="field-wrap">
-        <label>cookie_name</label>
-        <input type="text" class="f-cookie_name" placeholder="session" value="${esc(data.cookie_name || '')}">
-      </div>
+          <label>cookie_name <span style="font-weight:400;color:#8b949e">（留空默认 session）</span></label>
+          <input type="text" class="f-cookie_name" placeholder="session" value="${esc(data.cookie_name || '')}">
+        </div>
     </div>
     <div class="account-row">
       <div class="field-wrap">
@@ -143,8 +143,15 @@ function collectFromList() {
 // ---- JSON mode ----
 
 function renderJson(accounts) {
-  document.getElementById('jsonTextarea').value = JSON.stringify(accounts, null, 2);
-  document.getElementById('jsonErr').style.display = 'none';
+  const ta = document.getElementById('jsonTextarea');
+  const errEl = document.getElementById('jsonErr');
+  // Only set value if there's real data — keep placeholder visible when empty
+  if (accounts && accounts.length > 0) {
+    ta.value = JSON.stringify(accounts, null, 2);
+  } else {
+    ta.value = '';
+  }
+  errEl.style.display = 'none';
 }
 
 function collectFromJson() {
@@ -188,12 +195,12 @@ function collectAccounts() {
 async function save() {
   const githubToken = getVal('githubToken');
   const repoOwner = getVal('repoOwner');
-  const repoName = getVal('repoName');
+  const repoName = getVal('repoName') || 'anyrouter-check-in';
   const environmentName = getVal('environmentName');
   const refreshInterval = parseInt(document.getElementById('refreshInterval').value) || 360;
 
-  if (!githubToken || !repoOwner || !repoName) {
-    showStatus('请填写 GitHub Token、Owner 和仓库名', 'error'); return;
+  if (!githubToken || !repoOwner) {
+    showStatus('请填写 GitHub Token 和 Owner', 'error'); return;
   }
   if (refreshInterval < 30 || refreshInterval > 1440) {
     showStatus('同步间隔需在 30–1440 分钟之间', 'error'); return;
