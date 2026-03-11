@@ -136,7 +136,9 @@ class NotificationKit:
 		with httpx.Client(timeout=30.0) as client:
 			client.post(url, json=data)
 
-	def push_message(self, title: str, content: str, msg_type: Literal['text', 'html', 'green', 'orange', 'red', 'blue'] = 'text'):
+	def push_message(
+		self, title: str, content: str, msg_type: Literal['text', 'html', 'green', 'orange', 'red', 'blue'] = 'text'
+	):
 		feishu_template = msg_type if msg_type in {'green', 'orange', 'red', 'blue'} else 'blue'
 		email_type = msg_type if msg_type in {'text', 'html'} else 'text'
 		notifications = [

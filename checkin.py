@@ -246,15 +246,19 @@ def format_check_in_notification(detail: dict) -> str:
 	success = detail.get('success', False)
 
 	if before_quota is not None and before_used is not None:
-		lines.extend([
-			'  📍 签到前',
-			f'     💵 余额: ${before_quota:.2f}  |  📊 累计消耗: ${before_used:.2f}',
-		])
+		lines.extend(
+			[
+				'  📍 签到前',
+				f'     💵 余额: ${before_quota:.2f}  |  📊 累计消耗: ${before_used:.2f}',
+			]
+		)
 	if after_quota is not None and after_used is not None:
-		lines.extend([
-			'  📍 签到后',
-			f'     💵 余额: ${after_quota:.2f}  |  📊 累计消耗: ${after_used:.2f}',
-		])
+		lines.extend(
+			[
+				'  📍 签到后',
+				f'     💵 余额: ${after_quota:.2f}  |  📊 累计消耗: ${after_used:.2f}',
+			]
+		)
 
 	if not success:
 		lines.append('  ━━━━━━━━━━━━━━━━━━━━')
@@ -435,15 +439,25 @@ async def main():
 					'name': account.get_display_name(i),
 					'provider_name': account.provider,
 					'provider_domain': provider_config_for_detail.domain if provider_config_for_detail else '',
-					'before_quota': user_info_before['quota'] if user_info_before and user_info_before.get('success') else None,
-					'before_used': user_info_before['used_quota'] if user_info_before and user_info_before.get('success') else None,
-					'after_quota': user_info_after['quota'] if user_info_after and user_info_after.get('success') else None,
-					'after_used': user_info_after['used_quota'] if user_info_after and user_info_after.get('success') else None,
+					'before_quota': user_info_before['quota']
+					if user_info_before and user_info_before.get('success')
+					else None,
+					'before_used': user_info_before['used_quota']
+					if user_info_before and user_info_before.get('success')
+					else None,
+					'after_quota': user_info_after['quota']
+					if user_info_after and user_info_after.get('success')
+					else None,
+					'after_used': user_info_after['used_quota']
+					if user_info_after and user_info_after.get('success')
+					else None,
 					'check_in_reward': 0,
 					'usage_increase': 0,
 					'balance_change': 0,
 					'success': success,
-					'error_message': None if success else (user_info_after.get('error') if user_info_after else 'Unknown error'),
+					'error_message': None
+					if success
+					else (user_info_after.get('error') if user_info_after else 'Unknown error'),
 				}
 
 		except Exception as e:

@@ -199,7 +199,7 @@ def _merge_accounts(base_accounts: list[dict], individual_accounts: list[dict]) 
 
 	for ind_acct in individual_accounts:
 		env_key = ind_acct.pop('_env_key', '')
-		suffix = env_key[len('ANYROUTER_ACCOUNT_'):] if env_key.startswith('ANYROUTER_ACCOUNT_') else ''
+		suffix = env_key[len('ANYROUTER_ACCOUNT_') :] if env_key.startswith('ANYROUTER_ACCOUNT_') else ''
 
 		matched_idx = None
 		for api_user_val, idx in api_user_index.items():
