@@ -125,49 +125,51 @@ const DOMAIN_TO_PROVIDER = {
   'https://welfare.apikey.cc':   'APIKEY',
 };
 
-/**
- * Search for a named cookie across ALL cookie stores (default + incognito etc.)
- * using both {url} and {domain} strategies, to work around Service Worker
- * store isolation in MV3.
- *
- * Returns the cookie value string, or null if not found.
- */
-async function findCookieAcrossStores(domain, cookieName) {
-  const hostname = new URL(domain).hostname;
-  const url = domain.replace(/\/$/, '');
+// ── Cookie store helpers ─────────────────────────────────────────────────────
+// The Service Worker does NOT have a "current tab", so chrome.cookies.getAll()
+// without an explicit storeId may silently query an empty/wrong store.
+// We enumerate every store (normal + incognito) and search all of them.
 
-  // Enumerate every cookie store the extension can see
-  let stores;
+async function getCookieStoreIds() {
   try {
-    stores = await chrome.cookies.getAllCookieStores();
+    const stores = await chrome.cookies.getAllCookieStores();
+    return stores.map(s => s.id);
   } catch {
-    stores = [{ id: '0' }];
+    return ['0']; // fallback to default store
   }
+}
 
-  for (const store of stores) {
-    const storeId = store.id;
-
-    // Strategy 1: url-based (respects scope rules, but works in SW for https)
-    try {
-      const byUrl = await chrome.cookies.getAll({ url, name: cookieName, storeId });
-      if (byUrl.length > 0) return byUrl[0].value;
-    } catch { /* ignore */ }
-
-    // Strategy 2: domain-based (hostname suffix match, ignores scope)
-    try {
-      const byDomain = await chrome.cookies.getAll({ domain: hostname, name: cookieName, storeId });
-      if (byDomain.length > 0) return byDomain[0].value;
-    } catch { /* ignore */ }
-
-    // Strategy 3: dot-prefixed domain (matches cookies set on .hostname)
-    try {
-      const byDotDomain = await chrome.cookies.getAll({ domain: `.${hostname}`, name: cookieName, storeId });
-      if (byDotDomain.length > 0) return byDotDomain[0].value;
-    } catch { /* ignore */ }
+async function findCookieAcrossStores(hostname, cookieName) {
+  const storeIds = await getCookieStoreIds();
+  for (const storeId of storeIds) {
+    // Try with exact hostname first, then with leading dot (subdomain match)
+    for (const domainQuery of [hostname, `.${hostname}`]) {
+      const cookies = await chrome.cookies.getAll({
+        domain: domainQuery,
+        name: cookieName,
+        storeId,
+      });
+      if (cookies.length > 0) return cookies[0];
+    }
   }
-
   return null;
 }
+
+async function getAllCookiesAcrossStores(hostname) {
+  const storeIds = await getCookieStoreIds();
+  const all = [];
+  for (const storeId of storeIds) {
+    for (const domainQuery of [hostname, `.${hostname}`]) {
+      const cookies = await chrome.cookies.getAll({ domain: domainQuery, storeId });
+      all.push(...cookies);
+    }
+  }
+  // deduplicate by name
+  const seen = new Set();
+  return all.filter(c => { if (seen.has(c.name)) return false; seen.add(c.name); return true; });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 async function syncOneAccount(config, account) {
   const { domain, cookie_name } = account;
@@ -178,25 +180,22 @@ async function syncOneAccount(config, account) {
   try {
     await Logger.info(`Extracting cookie "${targetCookieName}" for ${label}`, { domain });
 
-    const cookieValue = await findCookieAcrossStores(domain, targetCookieName);
+    const hostname = new URL(domain).hostname;
+    const cookie = await findCookieAcrossStores(hostname, targetCookieName);
 
-    if (!cookieValue) {
-      const hostname = new URL(domain).hostname;
-      // Collect diagnostics: list all cookies across all stores for this domain
-      const stores = await chrome.cookies.getAllCookieStores();
-      const allNames = [];
-      for (const store of stores) {
-        const cs = await chrome.cookies.getAll({ domain: hostname, storeId: store.id });
-        cs.forEach(c => allNames.push(`[store:${store.id}] ${c.name}`));
-      }
+    if (!cookie) {
+      // List all available cookies across all stores for debugging
+      const allCookies = await getAllCookiesAcrossStores(hostname);
       await Logger.error(`Cookie "${targetCookieName}" not found for ${label}`, {
         domain,
-        available: allNames,
-        stores: stores.map(s => s.id)
+        available: allCookies.map(c => c.name),
+        stores_checked: await getCookieStoreIds(),
       });
       return { success: false, label, error: `cookie "${targetCookieName}" not found` };
     }
-    await Logger.success(`Cookie extracted for ${label}`, { length: cookieValue.length });
+
+    const cookieValue = cookie.value;
+    await Logger.success(`Cookie extracted for ${label}`, { length: cookieValue.length, storeId: cookie.storeId });
 
     await Logger.info(`Fetching api_user from /api/user/self for ${label}...`);
     const api_user = await fetchApiUser(domain, targetCookieName, cookieValue);
