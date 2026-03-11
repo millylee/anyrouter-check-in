@@ -737,6 +737,7 @@
           <input type="text" class="f-env_key_suffix" placeholder="自动生成 api_user_PROVIDER" value="${esc(data.env_key_suffix || '')}">
         </div>
       </div>
+      <input type="hidden" class="f-imported-session" value="${esc(data._imported_session || '')}">
     `;
     item.querySelector('.arc-del').addEventListener('click', () => {
       item.remove();
@@ -784,13 +785,15 @@
       const domain = item.querySelector('.f-domain').value.trim();
       if (!domain) return null;
       const entry = { domain };
-      const api_user      = item.querySelector('.f-api_user').value.trim();
-      const env_key_suffix = item.querySelector('.f-env_key_suffix').value.trim();
-      const cookie_name   = item.querySelector('.f-cookie_name').value.trim();
-      if (api_user)       entry.api_user       = api_user;
-      if (env_key_suffix) entry.env_key_suffix = env_key_suffix;
+      const api_user        = item.querySelector('.f-api_user').value.trim();
+      const env_key_suffix  = item.querySelector('.f-env_key_suffix').value.trim();
+      const cookie_name     = item.querySelector('.f-cookie_name').value.trim();
+      const importedSession = item.querySelector('.f-imported-session')?.value || '';
+      if (api_user)        entry.api_user        = api_user;
+      if (env_key_suffix)  entry.env_key_suffix  = env_key_suffix;
       // Only persist cookie_name if non-default
       if (cookie_name && cookie_name !== 'session') entry.cookie_name = cookie_name;
+      if (importedSession) entry._imported_session = importedSession;
       return entry;
     }).filter(Boolean);
   }
