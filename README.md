@@ -9,7 +9,9 @@
 
 多平台多账号自动签到，理论上支持所有 NewAPI、OneAPI 平台，目前内置支持 Any Router 与 Agent Router，其它可根据文档进行摸索配置。
 
-推荐搭配使用[Auo](https://github.com/millylee/auo)，支持任意 Claude Code Token 切换的工具。
+**配合 [Chrome 扩展 / 油猴脚本](#chrome-扩展anyrouter-cookie-updater) 食用效果更好** — 自动从浏览器提取 session cookie 并推送到 GitHub Secrets，cookie 过期时无需手动重新获取。
+
+推荐搭配使用 [Auo](https://github.com/millylee/auo)，支持任意 Claude Code Token 切换的工具。
 
 **维护开源不易，如果本项目帮助到了你，请帮忙点个 Star，谢谢!**
 
@@ -234,7 +236,7 @@ ANYROUTER_ACCOUNT_333333_APIKEY
 ```
 
 > **为什么不能只用 api_user？**  
-> `api_user` 是各平台内部的自增数字 ID，不同平台间完全独立，相同数字完全可能出现在多个平台（例如平台 A 的用户 111111 和平台 B 的用户 111111 是两个不同的人）。必须加上平台标识才能唯一确定一个账号。
+> `api_user` 是各平台内部的自增数字 ID，不同平台间完全独立，相同数字完全可能出现在多个平台（例如平台 A 和平台 B 各有用户 ID 12345，实为两个不同的人）。必须加上平台标识才能唯一确定一个账号。
 
 ### 用法
 
@@ -242,7 +244,7 @@ ANYROUTER_ACCOUNT_333333_APIKEY
 
 ```
 ANYROUTER_ACCOUNT_123456_ANYROUTER   = {"cookies": {"session": "new_session_value"}}
-ANYROUTER_ACCOUNT_789012_AGENTROUTER  = {"cookies": {"session": "another_session"}, "api_user": "789012", "provider": "agentrouter"}
+ANYROUTER_ACCOUNT_789012_AGENTROUTER = {"cookies": {"session": "another_session"}, "api_user": "789012", "provider": "agentrouter"}
 ```
 
 ### 合并规则
@@ -645,7 +647,7 @@ Tampermonkey 会自动识别并弹出安装确认页面。
 
 #### v1.3 - Secret 命名规范统一
 
-- **统一 Secret 命名格式为 `{api_user}_{PROVIDER}`**：`api_user` 是各平台内部自增 ID，不同平台间可能重复（如平台 A 和平台 B 都有 ID 为 111111 的用户），因此不能单独用 `api_user` 作为 secret 后缀，必须加上平台标识才能唯一区分
+- **统一 Secret 命名格式为 `{api_user}_{PROVIDER}`**：`api_user` 是各平台内部自增 ID，不同平台间可能重复，因此不能单独用 `api_user` 作为 secret 后缀，必须加上平台标识才能唯一区分
 - Chrome 插件和 Tampermonkey 脚本：导入 ANYROUTER_ACCOUNTS 时所有账号（包括 anyrouter 本身）统一生成 `{api_user}_{PROVIDER}` 格式的 `env_key_suffix`
 - `background.js` / Tampermonkey `syncOneAccount`：手动配置账号时，若未填写 `env_key_suffix`，在 `api_user` 自动解析成功后自动生成 `{api_user}_{PROVIDER}` 后缀，不再 fallback 为纯 `api_user`
 - README 更新 Secret 命名规范说明，删除混用两种格式的示例
