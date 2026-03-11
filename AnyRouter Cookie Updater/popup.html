@@ -54,6 +54,7 @@
     .account-row input { font-size: 11px; padding: 4px 7px; }
     .field-wrap { flex: 1; display: flex; flex-direction: column; }
     .field-wrap label { font-size: 10px; margin-bottom: 2px; }
+    .field-opt { font-weight: 400; color: #8b949e; font-style: italic; }
     .add-btn {
       width: 100%; padding: 6px; border: 1px dashed #d0d7de; border-radius: 6px; background: none;
       color: #57606a; font-size: 12px; cursor: pointer; margin-top: 4px; transition: .15s;
@@ -142,7 +143,7 @@
 ]'></textarea>
       <div class="json-err" id="jsonErr">⚠ JSON 格式错误</div>
       <div class="hint" style="margin-top:4px">
-        domain（必填）· api_user（可选，自动获取）· env_key_suffix（可选，自动生成为 api_user_PROVIDER）· cookie_name（可选，默认 session）
+        domain（必填）· api_user（留空自动解析）· env_key_suffix（留空自动生成为 {api_user}_{PROVIDER}）· cookie_name（留空默认 session）
       </div>
     </div>
   </div>

@@ -123,12 +123,12 @@ function addAccountItem(data = {}) {
     </div>
     <div class="account-row">
       <div class="field-wrap">
-        <label>api_user（可留空自动获取）</label>
-        <input type="text" class="f-api_user" placeholder="自动" value="${esc(data.api_user || '')}">
+        <label>api_user <span class="field-opt">自动解析</span></label>
+        <input type="text" class="f-api_user" placeholder="留空则同步时自动获取" value="${esc(data.api_user || '')}">
       </div>
       <div class="field-wrap">
-        <label>env_key_suffix（可留空）</label>
-        <input type="text" class="f-env_key_suffix" placeholder="自动生成 api_user_PROVIDER" value="${esc(data.env_key_suffix || '')}">
+        <label>env_key_suffix <span class="field-opt">自动生成</span></label>
+        <input type="text" class="f-env_key_suffix" placeholder="留空则生成为 {api_user}_{PROVIDER}" value="${esc(data.env_key_suffix || '')}">
       </div>
     </div>
   `;

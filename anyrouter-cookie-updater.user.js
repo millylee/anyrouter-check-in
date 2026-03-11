@@ -580,7 +580,7 @@
           </div>
           <div class="arc-json-err" id="arc-json-err">⚠ JSON 格式错误</div>
           <div class="arc-hint" style="margin-top:4px">
-            domain（必填）· api_user（可选，自动获取）· env_key_suffix（可选，自动生成为 api_user_PROVIDER）· cookie_name（可选，默认 session）
+            domain（必填）· api_user（留空自动解析）· env_key_suffix（留空自动生成为 {api_user}_{PROVIDER}）· cookie_name（留空默认 session）
           </div>
         </div>
       </div>
@@ -692,12 +692,12 @@
       </div>
       <div class="arc-row">
         <div class="arc-field">
-          <label>api_user（可留空自动获取）</label>
-          <input type="text" class="f-api_user" placeholder="自动" value="${esc(data.api_user || '')}">
+          <label>api_user <span style="font-weight:400;color:#8b949e;font-style:italic">自动解析</span></label>
+          <input type="text" class="f-api_user" placeholder="留空则同步时自动获取" value="${esc(data.api_user || '')}">
         </div>
         <div class="arc-field">
-          <label>env_key_suffix（可留空）</label>
-          <input type="text" class="f-env_key_suffix" placeholder="自动生成 api_user_PROVIDER" value="${esc(data.env_key_suffix || '')}">
+          <label>env_key_suffix <span style="font-weight:400;color:#8b949e;font-style:italic">自动生成</span></label>
+          <input type="text" class="f-env_key_suffix" placeholder="留空则生成为 {api_user}_{PROVIDER}" value="${esc(data.env_key_suffix || '')}">
         </div>
       </div>
     `;
