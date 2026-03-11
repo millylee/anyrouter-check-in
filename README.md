@@ -235,7 +235,7 @@ ANYROUTER_ACCOUNT_222222_XINGYUNGEPT
 ANYROUTER_ACCOUNT_333333_APIKEY
 ```
 
-> **为什么不能只用 api_user？**  
+> **为什么不能只用 api_user？**
 > `api_user` 是各平台内部的自增数字 ID，不同平台间完全独立，相同数字完全可能出现在多个平台（例如平台 A 和平台 B 各有用户 ID 12345，实为两个不同的人）。必须加上平台标识才能唯一确定一个账号。
 
 ### 用法

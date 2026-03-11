@@ -244,12 +244,14 @@ def format_check_in_notification(detail: dict) -> str:
 	]
 	if provider_info:
 		lines.append(provider_info.rstrip('\n'))
-	lines.extend([
-		'  📍 签到前',
-		f'     💵 余额: ${detail["before_quota"]:.2f}  |  📊 累计消耗: ${detail["before_used"]:.2f}',
-		'  📍 签到后',
-		f'     💵 余额: ${detail["after_quota"]:.2f}  |  📊 累计消耗: ${detail["after_used"]:.2f}',
-	])
+	lines.extend(
+		[
+			'  📍 签到前',
+			f'     💵 余额: ${detail["before_quota"]:.2f}  |  📊 累计消耗: ${detail["before_used"]:.2f}',
+			'  📍 签到后',
+			f'     💵 余额: ${detail["after_quota"]:.2f}  |  📊 累计消耗: ${detail["after_used"]:.2f}',
+		]
+	)
 
 	# 判断是否有变化
 	has_reward = detail['check_in_reward'] != 0
