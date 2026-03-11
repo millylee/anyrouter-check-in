@@ -183,6 +183,58 @@
 ]
 ```
 
+## 多行 JSON 支持
+
+`ANYROUTER_ACCOUNTS` 和 `PROVIDERS` 环境变量现在支持多行 JSON 格式，无需手动压缩为单行。脚本会自动处理换行和缩进。
+
+在 GitHub Secrets 中可以直接粘贴格式化后的 JSON：
+
+```json
+[
+  {
+    "name": "我的主账号",
+    "cookies": {
+      "session": "abc123session"
+    },
+    "api_user": "12345"
+  },
+  {
+    "name": "备用账号",
+    "provider": "agentrouter",
+    "cookies": {
+      "session": "xyz789session"
+    },
+    "api_user": "67890"
+  }
+]
+```
+
+不需要再通过在线配置生成器后手动转为一行 JSON。
+
+## 单账号独立管理（ANYROUTER_ACCOUNT_* 前缀）
+
+参考 [autocheck-anyrouter](https://github.com/rakuyoMo/autocheck-anyrouter) 方案，支持通过 `ANYROUTER_ACCOUNT_*` 前缀的环境变量独立管理每个账号。
+
+### 用法
+
+在 GitHub Environment Secrets 中添加以 `ANYROUTER_ACCOUNT_` 为前缀的 secret，每个 secret 包含一个账号的 JSON 配置：
+
+```
+ANYROUTER_ACCOUNT_123456 = {"cookies": {"session": "new_session_value"}}
+ANYROUTER_ACCOUNT_789012_AGENTROUTER = {"cookies": {"session": "another_session"}, "api_user": "789012", "provider": "agentrouter"}
+```
+
+### 合并规则
+
+- 如果 `ANYROUTER_ACCOUNTS` 中存在 `api_user` 与 `ANYROUTER_ACCOUNT_*` 后缀匹配的账号，独立配置中的字段会**覆盖**主配置中的对应字段（适合仅更新 cookies）
+- 如果没有匹配到，独立配置的账号会作为新账号追加
+- 自动去重：相同 `api_user` 只保留第一个
+
+### 适用场景
+
+- 某个账号 cookie 过期时，只需更新对应的 `ANYROUTER_ACCOUNT_*` secret，无需修改整个 `ANYROUTER_ACCOUNTS`
+- 搭配 Chrome 插件自动推送 cookie（见下文）
+
 ## 自定义 Provider 配置（可选）
 
 默认情况下，`anyrouter`、`agentrouter` 已内置配置，无需额外设置。如果你需要使用其他服务商，可以通过环境变量 `PROVIDERS` 配置：
@@ -347,7 +399,8 @@ uv sync --dev
 # 安装 Playwright 浏览器
 uv run playwright install chromium
 
-# 创建 .env 文件并配置（注意：JSON 必须是单行格式）
+# 创建 .env 文件并配置
+# 支持单行或多行 JSON（自动处理换行与空格）
 # 示例：
 # ANYROUTER_ACCOUNTS=[{"name":"账号1","cookies":{"session":"xxx"},"api_user":"12345"}]
 # PROVIDERS={"agentrouter":{"domain":"https://agentrouter.org"}}
@@ -412,6 +465,83 @@ uv run bandit -r . -c pyproject.toml
 uv run pytest tests/ --cov=.
 ```
 
+## Chrome 扩展：AnyRouter Cookie Updater
+
+本项目包含一个 Chrome 扩展 `AnyRouter Cookie Updater/`，可以自动从浏览器中提取已登录站点的 session cookie，并通过 GitHub API 推送到 GitHub Actions Environment Secrets。
+
+### 工作原理
+
+1. 从浏览器中提取已登录的 AnyRouter/其它平台的 `session` cookie
+2. 使用 GitHub API + libsodium sealed box 加密后推送到 Environment Secrets
+3. 生成 `ANYROUTER_ACCOUNT_*` 格式的 secret，签到脚本自动读取最新 cookie
+
+### 安装步骤
+
+1. 打开 Chrome，进入 `chrome://extensions/`
+2. 开启右上角的 "开发者模式"
+3. 点击 "加载已解压的扩展程序"
+4. 选择本仓库中的 `AnyRouter Cookie Updater/` 目录
+
+### 配置
+
+打开扩展弹窗，填写以下配置：
+
+| 配置项 | 说明 |
+| --- | --- |
+| **GitHub PAT** | Personal Access Token，需要 `repo` 权限（或 Environment secrets 写入权限） |
+| **仓库 Owner** | GitHub 用户名 |
+| **仓库名称** | 如 `anyrouter-check-in` |
+| **Environment 名称** | 如 `production`（留空则推送到 repository secrets） |
+| **账号列表** | JSON 数组，配置需要同步的账号 |
+| **同步间隔** | 定时同步间隔（分钟），建议 360（6 小时） |
+
+### 账号列表配置示例
+
+```json
+[
+  {
+    "domain": "https://anyrouter.top",
+    "api_user": "123456",
+    "env_key_suffix": "123456"
+  },
+  {
+    "domain": "https://agentrouter.org",
+    "api_user": "789012",
+    "env_key_suffix": "789012_AGENTROUTER",
+    "cookie_name": "session"
+  }
+]
+```
+
+**字段说明**：
+
+- `domain`（必需）：站点域名，用于从浏览器中提取 cookie
+- `api_user`（可选）：API 用户 ID，会写入 secret JSON 中
+- `env_key_suffix`（推荐）：secret 名称后缀，生成 `ANYROUTER_ACCOUNT_{suffix}`
+- `cookie_name`（可选）：要提取的 cookie 名称，默认为 `session`
+
+### 前提条件
+
+- 需要在浏览器中保持各站点的登录状态
+- GitHub PAT 需要有对应仓库 Environment secrets 的写入权限
+
+### 创建 GitHub PAT
+
+1. 访问 [GitHub Settings > Developer settings > Personal access tokens > Fine-grained tokens](https://github.com/settings/tokens?type=beta)
+2. 点击 "Generate new token"
+3. 选择对应仓库，权限中启用 **Secrets** 的 Read and Write 权限
+4. 生成后复制 token 到扩展配置中
+
 ## 免责声明
 
 本脚本仅用于学习和研究目的，使用前请确保遵守相关网站的使用条款.
+
+## 开发日志
+
+### 2026-03-11
+
+- **通知增强**：飞书/通知消息中每个账号现在显示所属平台名称和域名（如 `🌐 平台: freestyle (https://api.freestyle.cc.cd)`），解决了之前通知中不知道 Account 1 对应哪个网站的问题
+- **多行 JSON 支持**：`ANYROUTER_ACCOUNTS` 和 `PROVIDERS` 环境变量支持多行 JSON，无需手动将在线配置生成器的输出压缩为一行
+- **ANYROUTER_ACCOUNT_* 独立账号管理**：参考 [autocheck-anyrouter](https://github.com/rakuyoMo/autocheck-anyrouter) 方案，支持通过 `ANYROUTER_ACCOUNT_` 前缀的环境变量独立管理每个账号的 cookie，某个账号过期时只需更新对应 secret
+- **GitHub Actions 适配**：workflow 自动注入所有 `ANYROUTER_ACCOUNT_*` secrets 到环境变量
+- **Chrome 扩展 AnyRouter Cookie Updater**：参考 Flow2API Token Updater，构建了自动从浏览器提取 session cookie 并推送到 GitHub Actions Environment Secrets 的 Chrome 扩展，实现 cookie 失效后的自动更新

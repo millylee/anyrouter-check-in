@@ -232,14 +232,24 @@ def format_check_in_notification(detail: dict) -> str:
 	Returns:
 		格式化后的通知消息
 	"""
+	provider_info = ''
+	if detail.get('provider_name') or detail.get('provider_domain'):
+		pname = detail.get('provider_name', '')
+		pdomain = detail.get('provider_domain', '')
+		provider_info = f'  🌐 平台: {pname} ({pdomain})\n' if pdomain else f'  🌐 平台: {pname}\n'
+
 	lines = [
 		f'[CHECK-IN] {detail["name"]}',
 		'  ━━━━━━━━━━━━━━━━━━━━',
+	]
+	if provider_info:
+		lines.append(provider_info.rstrip('\n'))
+	lines.extend([
 		'  📍 签到前',
 		f'     💵 余额: ${detail["before_quota"]:.2f}  |  📊 累计消耗: ${detail["before_used"]:.2f}',
 		'  📍 签到后',
 		f'     💵 余额: ${detail["after_quota"]:.2f}  |  📊 累计消耗: ${detail["after_used"]:.2f}',
-	]
+	])
 
 	# 判断是否有变化
 	has_reward = detail['check_in_reward'] != 0
@@ -403,15 +413,18 @@ async def main():
 					# 余额变化
 					balance_change = after_quota - before_quota
 
+					provider_config_for_detail = app_config.get_provider(account.provider)
 					account_check_in_details[account_key] = {
 						'name': account.get_display_name(i),
+						'provider_name': account.provider,
+						'provider_domain': provider_config_for_detail.domain if provider_config_for_detail else '',
 						'before_quota': before_quota,
 						'before_used': before_used,
 						'after_quota': after_quota,
 						'after_used': after_used,
-						'check_in_reward': check_in_reward,  # 签到获得
-						'usage_increase': usage_increase,  # 本次消耗
-						'balance_change': balance_change,  # 余额变化
+						'check_in_reward': check_in_reward,
+						'usage_increase': usage_increase,
+						'balance_change': balance_change,
 						'success': success,
 					}
 

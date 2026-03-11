@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AnyRouter Cookie Updater</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 480px;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 13px;
+      color: #24292f;
+      background: #f6f8fa;
+    }
+    h1 { font-size: 17px; margin-bottom: 14px; color: #0969da; }
+    .section { background: #fff; border: 1px solid #d0d7de; border-radius: 6px; padding: 14px; margin-bottom: 12px; }
+    .section-title { font-size: 13px; font-weight: 600; margin-bottom: 10px; color: #24292f; }
+    .form-group { margin-bottom: 10px; }
+    label { display: block; margin-bottom: 4px; font-weight: 500; color: #57606a; font-size: 12px; }
+    input[type="text"], input[type="password"], input[type="number"], textarea {
+      width: 100%; padding: 6px 10px; border: 1px solid #d0d7de; border-radius: 6px; font-size: 13px;
+      font-family: inherit; background: #f6f8fa;
+    }
+    input:focus, textarea:focus { outline: none; border-color: #0969da; box-shadow: 0 0 0 3px rgba(9,105,218,.15); background: #fff; }
+    textarea { min-height: 100px; resize: vertical; font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace; font-size: 11px; }
+    .hint { font-size: 11px; color: #8b949e; margin-top: 2px; }
+    .btn-row { display: flex; gap: 8px; margin-top: 12px; }
+    button {
+      flex: 1; padding: 8px 12px; border: 1px solid transparent; border-radius: 6px;
+      font-size: 13px; font-weight: 500; cursor: pointer; transition: .15s ease;
+    }
+    .btn-primary { background: #2da44e; color: #fff; border-color: rgba(27,31,36,.15); }
+    .btn-primary:hover { background: #218838; }
+    .btn-blue { background: #0969da; color: #fff; }
+    .btn-blue:hover { background: #0860ca; }
+    .btn-outline { background: #f6f8fa; color: #24292f; border-color: #d0d7de; }
+    .btn-outline:hover { background: #eaeef2; }
+    .status { margin-top: 10px; padding: 10px; border-radius: 6px; font-size: 12px; display: none; }
+    .status.success { background: #dafbe1; color: #116329; border: 1px solid #aceebb; }
+    .status.error { background: #ffebe9; color: #82071e; border: 1px solid #ffcecb; }
+    .status.info { background: #ddf4ff; color: #0969da; border: 1px solid #b6e3ff; }
+    .info-box {
+      background: #fff8c5; border: 1px solid #d4a72c; border-radius: 6px; padding: 10px;
+      font-size: 11px; color: #6a5304; margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔄 AnyRouter Cookie Updater</h1>
+
+  <div class="section">
+    <div class="section-title">GitHub 配置</div>
+    <div class="form-group">
+      <label for="githubToken">Personal Access Token (PAT)</label>
+      <input type="password" id="githubToken" placeholder="ghp_xxxxxxxxxxxx">
+      <div class="hint">需要 repo 权限（或 Environment secrets 写入权限）</div>
+    </div>
+    <div class="form-group">
+      <label for="repoOwner">仓库 Owner</label>
+      <input type="text" id="repoOwner" placeholder="your-username">
+    </div>
+    <div class="form-group">
+      <label for="repoName">仓库名称</label>
+      <input type="text" id="repoName" placeholder="anyrouter-check-in">
+    </div>
+    <div class="form-group">
+      <label for="environmentName">Environment 名称（可选）</label>
+      <input type="text" id="environmentName" placeholder="production" value="production">
+      <div class="hint">留空则推送到 repository secrets</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">账号配置</div>
+    <div class="form-group">
+      <label for="accounts">账号列表 (JSON 数组)</label>
+      <textarea id="accounts" placeholder='[
+  {
+    "domain": "https://anyrouter.top",
+    "api_user": "123456",
+    "env_key_suffix": "123456"
+  },
+  {
+    "domain": "https://agentrouter.org",
+    "api_user": "789012",
+    "env_key_suffix": "789012_AGENTROUTER"
+  }
+]'></textarea>
+      <div class="hint">
+        domain: 站点地址 | api_user: 用户ID | env_key_suffix: secret 后缀（生成 ANYROUTER_ACCOUNT_{suffix}）<br>
+        cookie_name: 可选，默认 "session"
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">定时设置</div>
+    <div class="form-group">
+      <label for="refreshInterval">同步间隔（分钟）</label>
+      <input type="number" id="refreshInterval" value="360" min="30" max="1440">
+      <div class="hint">建议 360 分钟（6 小时），与签到频率一致</div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn-primary" id="saveBtn">💾 保存配置</button>
+    <button class="btn-blue" id="syncBtn">🔄 立即同步</button>
+  </div>
+  <div class="btn-row">
+    <button class="btn-outline" id="logsBtn" style="width:100%">📋 查看日志</button>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <div class="info-box">
+    <strong>⚡ 工作原理：</strong><br>
+    1. 从浏览器中提取已登录站点的 session cookie<br>
+    2. 通过 GitHub API 加密后推送到 Environment Secrets<br>
+    3. 签到脚本从 ANYROUTER_ACCOUNT_* 读取最新 cookie<br>
+    <br>
+    <strong>⚠️ 前提：</strong>你需要在浏览器中保持各站点的登录状态
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
