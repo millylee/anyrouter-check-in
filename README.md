@@ -632,6 +632,16 @@ Tampermonkey 会自动识别并弹出安装确认页面。
 
 ## 开发日志
 
+### 2026-03-12
+
+#### v1.5 - Cookie 提取与 api_user 解析修复
+
+- **修复 Cookie 竞态条件**：重构 `syncOneAccount` 为两阶段：Phase 1 直接从浏览器 cookie jar 读取（无需打开 tab），Phase 2 仅在 jar 中找不到时才打开后台 tab。之前总是先打开 tab 再查 cookie，导致服务器 invalidate/rotate session，造成 0/5 同步失败
+- **修复 api_user 解析失败**：Service Worker 的 `fetch()` 无法跨域发送 Cookie 头，导致 `/api/user/self` 请求 401。改为优先从 localStorage 读取 user id（new-api 前端缓存），零网络请求；回退到在页面上下文中执行同源 XHR
+- **修复 tab 生命周期 bug**：`fetchApiUser` 调用前 tab 已被关闭并置空，导致 `tab?.id` 永远为 `undefined`。现在先调用 `fetchApiUser` 再关闭 tab
+- **油猴脚本同步更新**：`fetchApiUser` 新增 localStorage 快速路径，在目标站点页面上直接读取缓存的 user id，无需发起 API 请求
+- Chrome 扩展版本升至 v1.4.0
+
 ### 2026-03-11
 
 #### v1.4 - 加密实现修复

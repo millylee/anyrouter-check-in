@@ -78,25 +78,72 @@
   };
 
   // ──────────────────────────────────────────────
-  //  Cookie extraction via GM_cookie
+  //  Cookie extraction
   // ──────────────────────────────────────────────
-  function getCookieValue(domain, name) {
+
+  // Parse document.cookie for the current page (works for non-httpOnly cookies)
+  function getDocumentCookie(name) {
+    const match = document.cookie.split('; ').find(c => c.startsWith(name + '='));
+    return match ? match.split('=').slice(1).join('=') : null;
+  }
+
+  // Use GM_cookie.list with domain-based queries (works for httpOnly cookies too)
+  function getGMCookie(domain, name) {
+    const hostname = new URL(domain).hostname;
+    const queries = [
+      { domain: hostname, name },
+      { domain: `.${hostname}`, name },
+    ];
     return new Promise((resolve) => {
-      try {
-        GM_cookie.list({ domain: new URL(domain).hostname, name }, (cookies, err) => {
-          if (err || !cookies || cookies.length === 0) { resolve(null); return; }
-          resolve(cookies[0].value);
-        });
-      } catch (e) {
-        resolve(null);
+      let idx = 0;
+      function tryNext() {
+        if (idx >= queries.length) { resolve(null); return; }
+        const query = queries[idx++];
+        try {
+          GM_cookie.list(query, (cookies, err) => {
+            if (!err && cookies && cookies.length > 0) {
+              resolve(cookies[0].value);
+            } else {
+              tryNext();
+            }
+          });
+        } catch {
+          tryNext();
+        }
       }
+      tryNext();
     });
   }
 
+  // Combined: try document.cookie first (if on the same site), then GM_cookie
+  async function getCookieValue(domain, name) {
+    const targetOrigin = new URL(domain).origin;
+    // If we're on the target site, try document.cookie first (fastest, most reliable)
+    if (location.origin === targetOrigin) {
+      const val = getDocumentCookie(name);
+      if (val) return val;
+    }
+    // Fall back to GM_cookie (cross-domain capable, can read httpOnly)
+    return getGMCookie(domain, name);
+  }
+
   // ──────────────────────────────────────────────
-  //  Fetch api_user from /api/user/self
+  //  Fetch api_user: localStorage first, then API
   // ──────────────────────────────────────────────
   function fetchApiUser(domain, cookieName, cookieValue) {
+    // Fast path: if we're on the target site, read from localStorage (new-api caches user there)
+    const targetOrigin = new URL(domain).origin;
+    if (location.origin === targetOrigin) {
+      try {
+        const raw = localStorage.getItem('user');
+        if (raw) {
+          const u = JSON.parse(raw);
+          const id = u?.id ?? null;
+          if (id != null) return Promise.resolve(String(id));
+        }
+      } catch {}
+    }
+    // Fallback: call /api/user/self via GM_xmlhttpRequest
     return new Promise((resolve) => {
       GM_xmlhttpRequest({
         method: 'GET',
@@ -258,10 +305,33 @@
     const label = env_key_suffix || domain;
 
     try {
-      log.info(`Extracting cookie "${targetCookieName}" for ${label}`);
+      log.info(`Extracting cookie "${targetCookieName}" for ${label}`, {
+        domain,
+        on_target_site: location.origin === new URL(domain).origin,
+      });
       const cookieValue = await getCookieValue(domain, targetCookieName);
       if (!cookieValue) {
-        log.error(`Cookie "${targetCookieName}" not found for ${label}`, { domain });
+        // List all available cookies for debugging
+        const hostname = new URL(domain).hostname;
+        const allCookies = await new Promise(r => {
+          try {
+            GM_cookie.list({ domain: hostname }, (cookies, err) => {
+              if (err || !cookies) {
+                GM_cookie.list({ domain: `.${hostname}` }, (c2) => r(c2 || []));
+              } else { r(cookies); }
+            });
+          } catch { r([]); }
+        });
+        // Also check document.cookie if on the same site
+        const docCookies = location.origin === new URL(domain).origin
+          ? document.cookie.split('; ').map(c => c.split('=')[0]).filter(Boolean)
+          : [];
+        log.error(`Cookie "${targetCookieName}" not found for ${label}`, {
+          domain,
+          on_target_site: location.origin === new URL(domain).origin,
+          gm_cookie_available: allCookies.map(c => `${c.name} (domain=${c.domain})`),
+          document_cookie_names: docCookies,
+        });
         return { success: false, label, error: `cookie not found` };
       }
       log.success(`Cookie extracted for ${label}`, { length: cookieValue.length });
@@ -530,7 +600,7 @@
     const accounts = cfg.accounts || [];
 
     if (panelView === 'logs') {
-      renderLogsView(panel, cfg);
+      renderLogsView(panel);
       return;
     }
 
@@ -641,7 +711,7 @@
     panel.querySelector('#arc-import-btn').addEventListener('click', () => openImportDialog(panel));
   }
 
-  function renderLogsView(panel, cfg) {
+  function renderLogsView(panel) {
     const logs = getLogs();
     panel.innerHTML = `
       <h2>📋 同步日志</h2>
