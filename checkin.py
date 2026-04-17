@@ -129,10 +129,10 @@ async def get_waf_cookies_with_playwright(account_name: str, login_url: str, req
 				return None
 
 
-def get_user_info(client, headers, user_info_url: str):
+async def get_user_info(client, headers, user_info_url: str):
 	"""获取用户信息"""
 	try:
-		response = client.get(user_info_url, headers=headers, timeout=30)
+		response = await client.get(user_info_url, headers=headers, timeout=30)
 
 		if response.status_code == 200:
 			data = response.json()
@@ -167,7 +167,7 @@ async def prepare_cookies(account_name: str, provider_config, user_cookies: dict
 	return {**waf_cookies, **user_cookies}
 
 
-def execute_check_in(client, account_name: str, provider_config, headers: dict):
+async def execute_check_in(client, account_name: str, provider_config, headers: dict):
 	"""执行签到请求"""
 	print(f'[NETWORK] {account_name}: Executing check-in')
 
@@ -176,9 +176,9 @@ def execute_check_in(client, account_name: str, provider_config, headers: dict):
 
 	sign_in_url = f'{provider_config.domain}{provider_config.sign_in_path}'
 	if provider_config.sign_in_method == 'GET':
-		response = client.get(sign_in_url, headers=checkin_headers, timeout=30)
+		response = await client.get(sign_in_url, headers=checkin_headers, timeout=30)
 	else:
-		response = client.post(sign_in_url, headers=checkin_headers, timeout=30)
+		response = await client.post(sign_in_url, headers=checkin_headers, timeout=30)
 
 	print(f'[RESPONSE] {account_name}: Response status code {response.status_code}')
 
@@ -280,7 +280,7 @@ async def check_in_account(account: AccountConfig, account_index: int, app_confi
 	if not all_cookies:
 		return False, None
 
-	client = httpx.Client(http2=True, timeout=30.0)
+	client = httpx.AsyncClient(http2=True, timeout=30.0)
 
 	try:
 		client.cookies.update(all_cookies)
@@ -300,28 +300,26 @@ async def check_in_account(account: AccountConfig, account_index: int, app_confi
 		}
 
 		user_info_url = f'{provider_config.domain}{provider_config.user_info_path}'
-		user_info_before = get_user_info(client, headers, user_info_url)
+		user_info_before = await get_user_info(client, headers, user_info_url)
 		if user_info_before and user_info_before.get('success'):
 			print(user_info_before['display'])
 		elif user_info_before:
 			print(user_info_before.get('error', 'Unknown error'))
 
 		if provider_config.needs_manual_check_in():
-			success = execute_check_in(client, account_name, provider_config, headers)
-			# 签到后再次获取用户信息，用于计算签到收益
-			user_info_after = get_user_info(client, headers, user_info_url)
+			success = await execute_check_in(client, account_name, provider_config, headers)
+			user_info_after = await get_user_info(client, headers, user_info_url)
 			return success, user_info_before, user_info_after
 		else:
 			print(f'[INFO] {account_name}: Check-in completed automatically (triggered by user info request)')
-			# 自动签到的情况，再次获取用户信息
-			user_info_after = get_user_info(client, headers, user_info_url)
+			user_info_after = await get_user_info(client, headers, user_info_url)
 			return True, user_info_before, user_info_after
 
 	except Exception as e:
 		print(f'[FAILED] {account_name}: Error occurred during check-in process - {str(e)[:50]}...')
 		return False, None, None
 	finally:
-		client.close()
+		await client.aclose()
 
 
 async def main():
