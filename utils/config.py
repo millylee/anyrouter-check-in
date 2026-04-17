@@ -17,6 +17,7 @@ class ProviderConfig:
 	domain: str
 	login_path: str = '/login'
 	sign_in_path: str | None = '/api/user/sign_in'
+	sign_in_method: Literal['GET', 'POST'] = 'POST'
 	user_info_path: str = '/api/user/self'
 	api_user_key: str = 'new-api-user'
 	bypass_method: Literal['waf_cookies'] | None = None
@@ -51,6 +52,7 @@ class ProviderConfig:
 			domain=data['domain'],
 			login_path=data.get('login_path', '/login'),
 			sign_in_path=data.get('sign_in_path', '/api/user/sign_in'),
+			sign_in_method=data.get('sign_in_method', 'POST').upper(),
 			user_info_path=data.get('user_info_path', '/api/user/self'),
 			api_user_key=data.get('api_user_key', 'new-api-user'),
 			bypass_method=data.get('bypass_method'),
