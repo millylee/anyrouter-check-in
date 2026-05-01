@@ -11,18 +11,18 @@ jobs:
     env:
       PYTHONIOENCODING: utf-8
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
-    - uses: astral-sh/setup-uv@v3
+    - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
       with:
         version: "latest"
 
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v6
       with:
         python-version: '3.11'
 
     - name: 缓存 UV 依赖
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       id: uv-cache
       with:
         path: |
@@ -47,7 +47,7 @@ jobs:
         echo "Playwright version: $version"
 
     - name: 缓存 Playwright 浏览器
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       id: playwright-cache
       with:
         path: ~\AppData\Local\ms-playwright
@@ -62,7 +62,7 @@ jobs:
         uv run playwright install chromium --with-deps
 
     - name: 恢复余额历史缓存
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: balance_hash.txt
         key: balance-hash-${{ github.sha }}
