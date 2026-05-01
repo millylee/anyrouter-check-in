@@ -71,10 +71,15 @@ class AppConfig:
 	"""应用配置"""
 
 	providers: Dict[str, ProviderConfig]
+	notify_on_failure: bool = True  # 失败时是否推送，对应环境变量 NOTIFY_ON_FAILURE（默认 true）
+	notify_on_success: bool = True  # 成功（含余额变化/首次运行）时是否推送，对应环境变量 NOTIFY_ON_SUCCESS（默认 true）
 
 	@classmethod
 	def load_from_env(cls) -> 'AppConfig':
 		"""从环境变量加载配置"""
+		notify_on_failure = os.getenv('NOTIFY_ON_FAILURE', 'true').lower() not in ('false', '0', 'no')
+		notify_on_success = os.getenv('NOTIFY_ON_SUCCESS', 'true').lower() not in ('false', '0', 'no')
+
 		providers = {
 			'anyrouter': ProviderConfig(
 				name='anyrouter',
@@ -106,7 +111,7 @@ class AppConfig:
 
 				if not isinstance(providers_data, dict):
 					print('[WARNING] PROVIDERS must be a JSON object, ignoring custom providers')
-					return cls(providers=providers)
+					return cls(providers=providers, notify_on_failure=notify_on_failure, notify_on_success=notify_on_success)
 
 				# 解析自定义 providers,会覆盖默认配置
 				for name, provider_data in providers_data.items():
@@ -124,7 +129,7 @@ class AppConfig:
 			except Exception as e:
 				print(f'[WARNING] Error loading PROVIDERS: {e}, using default configuration only')
 
-		return cls(providers=providers)
+		return cls(providers=providers, notify_on_failure=notify_on_failure, notify_on_success=notify_on_success)
 
 	def get_provider(self, name: str) -> ProviderConfig | None:
 		"""获取指定 provider 配置"""

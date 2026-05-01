@@ -355,7 +355,7 @@ async def main():
 
 			should_notify_this_account = False
 
-			if not success:
+			if not success and app_config.notify_on_failure:
 				should_notify_this_account = True
 				need_notify = True
 				account_name = account.get_display_name(i)
@@ -412,7 +412,8 @@ async def main():
 		except Exception as e:
 			account_name = account.get_display_name(i)
 			print(f'[FAILED] {account_name} processing exception: {e}')
-			need_notify = True  # 异常也需要通知
+			if app_config.notify_on_failure:
+				need_notify = True  # 异常也需要通知
 			notification_content.append(f'[FAIL] {account_name} exception: {str(e)[:50]}...')
 
 	# 检查余额变化
@@ -421,12 +422,14 @@ async def main():
 		if last_balance_hash is None:
 			# 首次运行
 			balance_changed = True
-			need_notify = True
+			if app_config.notify_on_success:
+				need_notify = True
 			print('[NOTIFY] First run detected, will send notification with current balances')
 		elif current_balance_hash != last_balance_hash:
 			# 余额有变化
 			balance_changed = True
-			need_notify = True
+			if app_config.notify_on_success:
+				need_notify = True
 			print('[NOTIFY] Balance changes detected, will send notification')
 		else:
 			print('[INFO] No balance changes detected')
