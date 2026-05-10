@@ -209,6 +209,7 @@
     "domain": "https://custom.example.com",
     "login_path": "/auth/login",
     "sign_in_path": "/api/checkin",
+    "sign_in_method": "POST",
     "user_info_path": "/api/profile",
     "api_user_key": "New-Api-User",
     "bypass_method": "waf_cookies",
@@ -236,6 +237,7 @@
 - `domain` (必需)：服务商的域名
 - `login_path` (可选)：登录页面路径，默认为 `/login`（仅在 `bypass_method` 为 `"waf_cookies"` 时使用）
 - `sign_in_path` (可选)：签到 API 路径，默认为 `/api/user/sign_in`
+- `sign_in_method` (可选)：签到 API 请求方法，支持 `GET` 或 `POST`，默认为 `POST`
 - `user_info_path` (可选)：用户信息 API 路径，默认为 `/api/user/self`
 - `api_user_key` (可选)：API 用户标识请求头名称，默认为 `new-api-user`
 - `bypass_method` (可选)：WAF 绕过方法
@@ -264,8 +266,9 @@
   - `bypass_method: "waf_cookies"`（需要先获取 WAF cookies，然后执行签到）
   - `sign_in_path: "/api/user/sign_in"`
 - `agentrouter`：
-  - `bypass_method: null`（直接使用用户 cookies 执行签到）
+  - `bypass_method: "waf_cookies"`（需要先获取 WAF cookies，然后执行签到）
   - `sign_in_path: "/api/user/sign_in"`
+  - `sign_in_method: "GET"`
 
 **重要提示**：
 

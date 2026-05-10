@@ -175,7 +175,11 @@ def execute_check_in(client, account_name: str, provider_config, headers: dict):
 	checkin_headers.update({'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'})
 
 	sign_in_url = f'{provider_config.domain}{provider_config.sign_in_path}'
-	response = client.post(sign_in_url, headers=checkin_headers, timeout=30)
+	sign_in_method = getattr(provider_config, 'sign_in_method', 'POST').upper()
+	if sign_in_method == 'GET':
+		response = client.get(sign_in_url, headers=checkin_headers, timeout=30)
+	else:
+		response = client.post(sign_in_url, headers=checkin_headers, timeout=30)
 
 	print(f'[RESPONSE] {account_name}: Response status code {response.status_code}')
 

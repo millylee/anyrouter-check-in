@@ -17,6 +17,7 @@ class ProviderConfig:
 	domain: str
 	login_path: str = '/login'
 	sign_in_path: str | None = '/api/user/sign_in'
+	sign_in_method: Literal['GET', 'POST'] = 'POST'
 	user_info_path: str = '/api/user/self'
 	api_user_key: str = 'new-api-user'
 	bypass_method: Literal['waf_cookies'] | None = None
@@ -44,13 +45,14 @@ class ProviderConfig:
 
 		配置格式:
 		- 基础: {"domain": "https://example.com"}
-		- 完整: {"domain": "https://example.com", "login_path": "/login", "api_user_key": "x-api-user", "bypass_method": "waf_cookies", ...}
+		- 完整: {"domain": "https://example.com", "login_path": "/login", "sign_in_method": "GET", "api_user_key": "x-api-user", "bypass_method": "waf_cookies", ...}
 		"""
 		return cls(
 			name=name,
 			domain=data['domain'],
 			login_path=data.get('login_path', '/login'),
 			sign_in_path=data.get('sign_in_path', '/api/user/sign_in'),
+			sign_in_method=data.get('sign_in_method', 'POST').upper(),
 			user_info_path=data.get('user_info_path', '/api/user/self'),
 			api_user_key=data.get('api_user_key', 'new-api-user'),
 			bypass_method=data.get('bypass_method'),
@@ -81,6 +83,7 @@ class AppConfig:
 				domain='https://anyrouter.top',
 				login_path='/login',
 				sign_in_path='/api/user/sign_in',
+				sign_in_method='POST',
 				user_info_path='/api/user/self',
 				api_user_key='new-api-user',
 				bypass_method='waf_cookies',
@@ -90,7 +93,8 @@ class AppConfig:
 				name='agentrouter',
 				domain='https://agentrouter.org',
 				login_path='/login',
-				sign_in_path=None,  # 无需签到接口，查询用户信息时自动完成签到
+				sign_in_path='/api/user/sign_in',
+				sign_in_method='GET',
 				user_info_path='/api/user/self',
 				api_user_key='new-api-user',
 				bypass_method='waf_cookies',
