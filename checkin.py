@@ -414,7 +414,7 @@ async def main():
 			print(f'[FAILED] {account_name} processing exception: {e}')
 			if app_config.notify_on_failure:
 				need_notify = True  # 异常也需要通知
-			notification_content.append(f'[FAIL] {account_name} exception: {str(e)[:50]}...')
+				notification_content.append(f'[FAIL] {account_name} exception: {str(e)[:50]}...')
 
 	# 检查余额变化
 	current_balance_hash = generate_balance_hash(current_balances) if current_balances else None
@@ -424,18 +424,22 @@ async def main():
 			balance_changed = True
 			if app_config.notify_on_success:
 				need_notify = True
-			print('[NOTIFY] First run detected, will send notification with current balances')
+				print('[NOTIFY] First run detected, will send notification with current balances')
+			else:
+				print('[INFO] First run detected, success notification disabled')
 		elif current_balance_hash != last_balance_hash:
 			# 余额有变化
 			balance_changed = True
 			if app_config.notify_on_success:
 				need_notify = True
-			print('[NOTIFY] Balance changes detected, will send notification')
+				print('[NOTIFY] Balance changes detected, will send notification')
+			else:
+				print('[INFO] Balance changes detected, success notification disabled')
 		else:
 			print('[INFO] No balance changes detected')
 
 	# 为有余额变化的情况添加所有成功账号到通知内容
-	if balance_changed:
+	if balance_changed and app_config.notify_on_success:
 		for i, account in enumerate(accounts):
 			account_key = f'account_{i + 1}'
 			if account_key in account_check_in_details:
@@ -476,7 +480,7 @@ async def main():
 		notify.push_message('AnyRouter Check-in Alert', notify_content, msg_type='text')
 		print('[NOTIFY] Notification sent due to failures or balance changes')
 	else:
-		print('[INFO] All accounts successful and no balance changes detected, notification skipped')
+		print('[INFO] No enabled notification scenario detected, notification skipped')
 
 	# 设置退出码
 	sys.exit(0 if success_count > 0 else 1)
