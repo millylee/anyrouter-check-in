@@ -73,6 +73,8 @@ jobs:
       env:
         ANYROUTER_ACCOUNTS: ${{ secrets.ANYROUTER_ACCOUNTS }}
         PROVIDERS: ${{ secrets.PROVIDERS }}
+        NOTIFY_ON_FAILURE: ${{ secrets.NOTIFY_ON_FAILURE }}
+        NOTIFY_ON_SUCCESS: ${{ secrets.NOTIFY_ON_SUCCESS }}
         DINGDING_WEBHOOK: ${{ secrets.DINGDING_WEBHOOK }}
         EMAIL_USER: ${{ secrets.EMAIL_USER }}
         EMAIL_PASS: ${{ secrets.EMAIL_PASS }}

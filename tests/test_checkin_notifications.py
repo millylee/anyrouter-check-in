@@ -13,6 +13,16 @@ from utils.config import AccountConfig, AppConfig
 import checkin
 
 
+def test_notify_flags_are_loaded_from_trimmed_environment(monkeypatch):
+	monkeypatch.setenv('NOTIFY_ON_FAILURE', ' true ')
+	monkeypatch.setenv('NOTIFY_ON_SUCCESS', ' false ')
+
+	app_config = AppConfig.load_from_env()
+
+	assert app_config.notify_on_failure is True
+	assert app_config.notify_on_success is False
+
+
 @pytest.fixture(autouse=True)
 def mock_balance_file(monkeypatch):
 	monkeypatch.setattr(checkin, 'load_balance_hash', lambda: 'old_hash')

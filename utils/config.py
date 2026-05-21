@@ -77,8 +77,8 @@ class AppConfig:
 	@classmethod
 	def load_from_env(cls) -> 'AppConfig':
 		"""从环境变量加载配置"""
-		notify_on_failure = os.getenv('NOTIFY_ON_FAILURE', 'true').lower() not in ('false', '0', 'no')
-		notify_on_success = os.getenv('NOTIFY_ON_SUCCESS', 'true').lower() not in ('false', '0', 'no')
+		notify_on_failure = os.getenv('NOTIFY_ON_FAILURE', 'true').strip().lower() not in ('false', '0', 'no')
+		notify_on_success = os.getenv('NOTIFY_ON_SUCCESS', 'true').strip().lower() not in ('false', '0', 'no')
 
 		providers = {
 			'anyrouter': ProviderConfig(
