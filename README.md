@@ -127,6 +127,17 @@
 - 脚本每 6 小时执行一次（1. action 无法准确触发，基本延时 1~1.5h；2. 目前观测到 anyrouter 的签到是每 24h 而不是零点就可签到）
 - 你也可以随时手动触发签到
 
+## Actions 历史记录清理
+
+本项目已内置 `清理 Actions 历史记录` workflow，用于定期删除过旧的 GitHub Actions 运行记录，避免历史记录长期累积。
+
+- 默认每月 1 日 03:30 UTC 自动执行一次清理。
+- 默认保留最近 30 天的运行记录，并且每个 workflow 至少保留 6 条记录。
+- 支持在 GitHub Actions 页面手动运行，并可按 workflow 名称/文件名、workflow 状态、运行结果进行过滤。
+- 手动运行时可将 `dry_run` 设置为 `true`，先预览将被删除的记录，不实际删除。
+
+该功能使用 [Mattraks/delete-workflow-runs](https://github.com/marketplace/actions/delete-workflow-runs)，并通过仓库默认的 `GITHUB_TOKEN` 授予 `actions: write` 与 `contents: read` 权限来删除当前仓库的历史运行记录。
+
 ## 注意事项
 
 - 请确保每个账号的 cookies 和 API User 都是正确的

@@ -1,0 +1,72 @@
+name: 清理 Actions 历史记录
+
+on:
+  schedule:
+    # 每月 1 日 03:30 UTC 自动清理一次历史运行记录
+    - cron: '30 3 1 * *'
+  workflow_dispatch:
+    inputs:
+      retain_days:
+        description: '保留最近多少天的 workflow runs'
+        required: true
+        default: '30'
+      keep_minimum_runs:
+        description: '每个 workflow 至少保留多少条运行记录'
+        required: true
+        default: '6'
+      delete_workflow_pattern:
+        description: '按 workflow 名称或文件名过滤；留空表示全部，多个条件用 | 分隔'
+        required: false
+        default: ''
+      delete_workflow_by_state_pattern:
+        description: '按 workflow 状态过滤'
+        required: true
+        default: 'ALL'
+        type: choice
+        options:
+          - 'ALL'
+          - active
+          - deleted
+          - disabled_fork
+          - disabled_inactivity
+          - disabled_manually
+      delete_run_by_conclusion_pattern:
+        description: '按运行结果过滤'
+        required: true
+        default: 'ALL'
+        type: choice
+        options:
+          - 'ALL'
+          - action_required
+          - cancelled
+          - failure
+          - skipped
+          - success
+      dry_run:
+        description: '仅预览将删除的记录，不实际删除'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  delete-workflow-runs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 删除旧的 Actions 运行记录
+        uses: Mattraks/delete-workflow-runs@v2.1.0
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          retain_days: ${{ github.event.inputs.retain_days || '30' }}
+          keep_minimum_runs: ${{ github.event.inputs.keep_minimum_runs || '6' }}
+          delete_workflow_pattern: ${{ github.event.inputs.delete_workflow_pattern || '' }}
+          delete_workflow_by_state_pattern: ${{ github.event.inputs.delete_workflow_by_state_pattern || 'ALL' }}
+          delete_run_by_conclusion_pattern: ${{ github.event.inputs.delete_run_by_conclusion_pattern || 'ALL' }}
+          dry_run: ${{ github.event.inputs.dry_run || 'false' }}
