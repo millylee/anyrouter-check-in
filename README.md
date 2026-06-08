@@ -66,26 +66,23 @@
 [
   {
     "name": "我的主账号",
-    "cookies": {
-      "session": "account1_session_value"
-    },
-    "api_user": "account1_api_user_id"
+    "email": "account1@example.com",
+    "password": "account1_password"
   },
   {
     "name": "备用账号",
     "provider": "agentrouter",
-    "cookies": {
-      "session": "account2_session_value"
-    },
-    "api_user": "account2_api_user_id"
+    "email": "account2@example.com",
+    "password": "account2_password"
   }
 ]
 ```
 
 **字段说明**：
 
-- `cookies` (必需)：用于身份验证的 cookies 数据
-- `api_user` (必需)：用于请求头的 new-api-user 参数
+- `email` + `password`：推荐的浏览器登录方式，登录成功后会自动获取 cookies 与用户标识
+- `cookies`：兼容旧版的 session cookies 登录方式
+- `api_user`：session cookies 登录时用于请求头的 new-api-user 参数；邮箱密码登录可省略
 - `provider` (可选)：指定使用的服务商，默认为 `anyrouter`
 - `name` (可选)：自定义账号显示名称，用于通知和日志中标识账号
 
@@ -95,7 +92,7 @@
 - 如果未提供 `name` 字段，会使用 `Account 1`、`Account 2` 等默认名称
 - `anyrouter` 与 `agentrouter` 配置已内置，无需填写
 
-接下来获取 cookies 与 api_user 的值。
+如果使用 session cookies 登录，接下来获取 cookies 与 api_user 的值。
 
 通过 F12 工具，切到 Application 面板，拿到 session 的值，最好重新登录下，该值 1 个月有效期，但有可能提前失效，失效后报 401 错误，到时请再重新获取。
 
@@ -220,7 +217,7 @@
 **关于 `bypass_method`**：
 
 - 不设置或设置为 `null`：直接使用用户提供的 cookies 进行请求（适合无 WAF 保护的网站）
-- 设置为 `"waf_cookies"`：使用 Playwright 打开浏览器获取 WAF cookies 后再进行请求（适合有 WAF 保护的网站）
+- 设置为 `"waf_cookies"`：使用 CloakBrowser 打开浏览器获取 WAF cookies 后再进行请求（适合有 WAF 保护的网站）
 
 > 注：`anyrouter` 和 `agentrouter` 已内置默认配置，无需在 `PROVIDERS` 中配置
 
@@ -239,7 +236,7 @@
 - `user_info_path` (可选)：用户信息 API 路径，默认为 `/api/user/self`
 - `api_user_key` (可选)：API 用户标识请求头名称，默认为 `new-api-user`
 - `bypass_method` (可选)：WAF 绕过方法
-  - `"waf_cookies"`：使用 Playwright 打开浏览器获取 WAF cookies 后再执行签到
+  - `"waf_cookies"`：使用 CloakBrowser 打开浏览器获取 WAF cookies 后再执行签到
   - 不设置或 `null`：直接使用用户 cookies 执行签到（适合无 WAF 保护的网站）
 - `waf_cookie_names` (可选)：绕过 WAF 所需 cookie 的名称列表，`bypass_method` 为 `waf_cookies` 时必须设置
 
@@ -264,13 +261,31 @@
   - `bypass_method: "waf_cookies"`（需要先获取 WAF cookies，然后执行签到）
   - `sign_in_path: "/api/user/sign_in"`
 - `agentrouter`：
-  - `bypass_method: null`（直接使用用户 cookies 执行签到）
-  - `sign_in_path: "/api/user/sign_in"`
+  - `bypass_method: "waf_cookies"`（需要获取 `acw_tc`）
+  - `sign_in_path: null`（查询用户信息时自动签到）
+  - `use_proxy: true`
 
 **重要提示**：
 
 - `PROVIDERS` 是可选的，不配置则使用内置的 `anyrouter` 和 `agentrouter`
 - 自定义的 provider 配置会覆盖同名的默认配置
+
+## 代理配置（可选）
+
+内置的 `agentrouter` 默认 `use_proxy: true`。如果你的运行环境访问该平台不稳定，可以在 GitHub Actions 中配置 mihomo 订阅代理。
+
+在仓库 Settings -> Environments -> production -> Environment secrets 中添加：
+
+- `PROXY_SUBSCRIPTION_URL`：Clash/Mihomo 订阅链接。设置后，workflow 会运行 `scripts/setup_mihomo_proxy.sh`，启动本地代理并写入 `CHECKIN_PROXY_URL`。
+
+本地运行时也可以直接使用已有代理：
+
+```bash
+CHECKIN_PROXY_URL=http://127.0.0.1:7890
+PROVIDERS={"agentrouter":{"use_proxy":true}}
+```
+
+如果使用订阅脚本，默认会用 `https://www.google.com/generate_204` 测试代理连通性；也可以通过 `PROXY_TEST_URL` 覆盖。
 
 ## 开启通知
 
@@ -351,13 +366,16 @@
 # 安装所有依赖
 uv sync --dev
 
-# 安装 Playwright 浏览器
-uv run playwright install chromium
+# 安装 CloakBrowser 浏览器
+uv run python -m cloakbrowser install
+# 如需使用本地浏览器，可设置 CLOAKBROWSER_BINARY_PATH=/path/to/browser
 
 # 创建 .env 文件并配置（注意：JSON 必须是单行格式）
 # 示例：
-# ANYROUTER_ACCOUNTS=[{"name":"账号1","cookies":{"session":"xxx"},"api_user":"12345"}]
+# ANYROUTER_ACCOUNTS=[{"name":"账号1","email":"your@email.com","password":"your_password"}]
 # PROVIDERS={"agentrouter":{"domain":"https://agentrouter.org"}}
+# PROXY_SUBSCRIPTION_URL=https://example.com/sub?token=xxx
+# CHECKIN_PROXY_URL=http://127.0.0.1:7890
 
 # 运行签到脚本
 uv run checkin.py
@@ -368,8 +386,8 @@ uv run checkin.py
 ```bash
 uv sync --dev
 
-# 安装 Playwright 浏览器
-uv run playwright install chromium
+# 浏览器相关测试或本地登录可安装 CloakBrowser，或设置 CLOAKBROWSER_BINARY_PATH 指向本地浏览器
+uv run python -m cloakbrowser install
 
 # 运行测试
 uv run pytest tests/

@@ -24,7 +24,6 @@ repos:
     rev: v1.20.2
     hooks:
       - id: mypy
-        additional_dependencies: [types-requests]
         args: [--ignore-missing-imports, --check-untyped-defs]
 
   - repo: https://github.com/PyCQA/bandit

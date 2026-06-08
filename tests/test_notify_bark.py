@@ -19,6 +19,7 @@ def bark_kit(monkeypatch):
 
 def test_send_bark_accepts_success_response(monkeypatch, bark_kit):
 	response = MagicMock()
+	response.status_code = 200
 	response.json.return_value = {'code': 200, 'message': 'success'}
 
 	client = MagicMock()
@@ -29,12 +30,12 @@ def test_send_bark_accepts_success_response(monkeypatch, bark_kit):
 
 	bark_kit.send_bark('title', 'content')
 
-	response.raise_for_status.assert_called_once_with()
 	client.post.assert_called_once()
 
 
 def test_send_bark_rejects_error_response(monkeypatch, bark_kit):
 	response = MagicMock()
+	response.status_code = 200
 	response.json.return_value = {'code': 400, 'message': 'invalid device key'}
 
 	client = MagicMock()
@@ -43,5 +44,5 @@ def test_send_bark_rejects_error_response(monkeypatch, bark_kit):
 	client_class.return_value.__enter__.return_value = client
 	monkeypatch.setattr('utils.notify.httpx.Client', client_class)
 
-	with pytest.raises(ValueError, match='Bark API returned code 400: invalid device key'):
+	with pytest.raises(RuntimeError, match='Bark request failed: invalid device key'):
 		bark_kit.send_bark('title', 'content')

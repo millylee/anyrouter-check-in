@@ -32,8 +32,8 @@ cd anyrouter-check-in
 # 安装所有依赖（包括开发依赖）
 uv sync --dev
 
-# 安装 Playwright 浏览器
-uv run playwright install chromium
+# 安装 CloakBrowser 浏览器；也可以通过 CLOAKBROWSER_BINARY_PATH 指向本地浏览器
+uv run python -m cloakbrowser install
 ```
 
 ### 配置环境变量
@@ -42,7 +42,7 @@ uv run playwright install chromium
 
 ```bash
 # 示例配置（注意：JSON 必须是单行格式）
-ANYROUTER_ACCOUNTS=[{"name":"测试账号","cookies":{"session":"xxx"},"api_user":"12345"}]
+ANYROUTER_ACCOUNTS=[{"name":"测试账号","email":"your@email.com","password":"your_password"}]
 ```
 
 ### 安装 pre-commit 钩子

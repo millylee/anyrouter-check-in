@@ -15,31 +15,29 @@ jobs:
 
     steps:
       - name: 检出代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: 安装 uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
         with:
           version: "latest"
 
       - name: 设置 Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: 缓存 UV 依赖
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
-          path: |
-            ~/.cache/uv
-            .venv
+          path: ~/.cache/uv
           key: ${{ runner.os }}-uv-dev-${{ hashFiles('pyproject.toml', 'uv.lock') }}
           restore-keys: |
             ${{ runner.os }}-uv-dev-
 
       - name: 安装依赖
         run: |
-          uv sync --dev
+          uv sync --dev --frozen
 
       - name: 代码风格检查 (Ruff Lint)
         id: ruff-lint

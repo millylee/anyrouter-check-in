@@ -3,13 +3,21 @@ on:
   schedule:
     - cron: '0 */12 * * *'
   workflow_dispatch:
+    inputs:
+      debug:
+        description: 开启调试模式（截图 artifact、详细日志）
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   checkin:
-    runs-on: windows-2025
+    runs-on: ubuntu-latest
     environment: production
     env:
       PYTHONIOENCODING: utf-8
+      PYTHONUNBUFFERED: 1
+      DEBUG_MODE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.debug == 'true' && 'true' || 'false' }}
     steps:
     - uses: actions/checkout@v6
 
@@ -25,52 +33,67 @@ jobs:
       uses: actions/cache@v5
       id: uv-cache
       with:
-        path: |
-          ~/.cache/uv
-          .venv
+        path: ~/.cache/uv
         key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml', 'uv.lock') }}
         restore-keys: |
           ${{ runner.os }}-uv-
 
     - name: 安装依赖
-      if: steps.uv-cache.outputs.cache-hit != 'true'
       run: |
-        echo "缓存未命中，开始安装项目依赖..."
-        uv sync
+        uv sync --frozen
         echo "✅ 环境初始化完成"
 
-    - name: 获取 Playwright 版本
-      id: playwright-version
+    - name: 安装系统依赖
       run: |
-        $version = uv run python -c "import importlib.metadata; print(importlib.metadata.version('playwright'))"
-        echo "version=$version" >> $env:GITHUB_OUTPUT
-        echo "Playwright version: $version"
+        sudo apt-get update
+        sudo apt-get install -y xvfb fonts-noto-color-emoji fonts-freefont-ttf fonts-unifont \
+          fonts-ipafont-gothic fonts-wqy-zenhei fonts-tlwg-loma-otf
 
-    - name: 缓存 Playwright 浏览器
+    - name: 缓存 CloakBrowser 二进制
       uses: actions/cache@v5
-      id: playwright-cache
+      id: cloakbrowser-cache
       with:
-        path: ~\AppData\Local\ms-playwright
-        key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
+        path: ~/.cloakbrowser
+        key: ${{ runner.os }}-cloakbrowser-v1
         restore-keys: |
-          ${{ runner.os }}-playwright-
+          ${{ runner.os }}-cloakbrowser-
 
-    - name: 安装 Playwright 浏览器
-      if: steps.playwright-cache.outputs.cache-hit != 'true'
+    - name: 安装 CloakBrowser
       run: |
-        echo "缓存未命中，开始安装 Playwright 浏览器..."
-        uv run playwright install chromium --with-deps
+        uv run python -m cloakbrowser install
+        echo "✅ CloakBrowser 安装完成"
 
     - name: 恢复余额历史缓存
       uses: actions/cache@v5
       with:
         path: balance_hash.txt
-        key: balance-hash-${{ github.sha }}
+        key: balance-hash-${{ github.ref_name }}-${{ github.run_id }}
         restore-keys: |
+          balance-hash-${{ github.ref_name }}-
           balance-hash-
+
+    - name: 恢复浏览器 Profile 缓存
+      uses: actions/cache@v5
+      with:
+        path: .browser_profiles
+        key: browser-profiles-${{ runner.os }}-v1
+        restore-keys: |
+          browser-profiles-${{ runner.os }}-
+
+    - name: 配置代理
+      env:
+        PROXY_SUBSCRIPTION_URL: ${{ secrets.PROXY_SUBSCRIPTION_URL }}
+        PROXY_TEST_URL: https://www.google.com/generate_204
+        MIHOMO_VERSION: v1.19.27
+        PROXY_REQUIRED: false
+      run: bash scripts/setup_mihomo_proxy.sh
 
     - name: 执行签到
       env:
+        DEBUG_MODE: ${{ env.DEBUG_MODE }}
+        CHECKIN_HEADLESS: false
+        CHECKIN_HUMANIZE: true
+        CHECKIN_WAIT_TIMEOUT_MS: 120000
         ANYROUTER_ACCOUNTS: ${{ secrets.ANYROUTER_ACCOUNTS }}
         PROVIDERS: ${{ secrets.PROVIDERS }}
         NOTIFY_ON_FAILURE: ${{ secrets.NOTIFY_ON_FAILURE }}
@@ -93,10 +116,31 @@ jobs:
         BARK_KEY: ${{ secrets.BARK_KEY }}
         BARK_SERVER: ${{ secrets.BARK_SERVER }}
       run: |
-        uv run checkin.py
+        xvfb-run -a --server-args="-screen 0 1920x1080x24" uv run checkin.py
+
+    - name: 上传调试截图
+      if: always() && env.DEBUG_MODE == 'true'
+      env:
+        HTTP_PROXY: ''
+        HTTPS_PROXY: ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: checkin-screenshots-${{ github.run_id }}
+        path: checkin_screenshots/
+        if-no-files-found: warn
+        include-hidden-files: true
+        retention-days: 14
+
+    - name: 停止代理
+      if: always()
+      run: bash scripts/stop_mihomo_proxy.sh
 
     - name: 执行结果
       if: always()
       run: |
         echo "签到任务执行完成"
-        echo "时间: $(Get-Date)"
+        echo "时间: $(date)"
+        if [ "${DEBUG_MODE}" = "true" ] && [ -d checkin_screenshots ] && [ "$(ls -A checkin_screenshots 2>/dev/null)" ]; then
+          echo "调试截图已上传为 artifact: checkin-screenshots-${{ github.run_id }}"
+          ls -la checkin_screenshots/
+        fi

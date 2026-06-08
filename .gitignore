@@ -9,5 +9,7 @@ __pycache__
 coverage.xml
 htmlcov/
 balance_hash.txt
+.browser_profiles
+checkin_screenshots
 
 .DS_Store
