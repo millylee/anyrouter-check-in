@@ -134,7 +134,19 @@ class NotificationKit:
 		}
 
 		with httpx.Client(timeout=30.0) as client:
-			client.post(url, json=data)
+			response = client.post(url, json=data)
+			response.raise_for_status()
+
+		try:
+			payload = response.json()
+		except ValueError:
+			return
+
+		if isinstance(payload, dict):
+			code = payload.get('code')
+			if code is not None and str(code) != '200':
+				message = payload.get('message') or payload.get('msg') or 'unknown error'
+				raise ValueError(f'Bark API returned code {code}: {message}')
 
 	def push_message(self, title: str, content: str, msg_type: Literal['text', 'html'] = 'text'):
 		notifications = [
