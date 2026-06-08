@@ -8,9 +8,8 @@ import pytest
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from utils.config import AccountConfig, AppConfig
-
 import checkin
+from utils.config import AccountConfig, AppConfig
 
 
 def test_notify_flags_are_loaded_from_trimmed_environment(monkeypatch):

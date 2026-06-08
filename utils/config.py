@@ -116,7 +116,9 @@ class AppConfig:
 
 				if not isinstance(providers_data, dict):
 					print('[WARNING] PROVIDERS must be a JSON object, ignoring custom providers')
-					return cls(providers=providers, notify_on_failure=notify_on_failure, notify_on_success=notify_on_success)
+					return cls(
+						providers=providers, notify_on_failure=notify_on_failure, notify_on_success=notify_on_success
+					)
 
 				# 解析自定义 providers,会覆盖默认配置
 				for name, provider_data in providers_data.items():
