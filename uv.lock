@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.11"
 
 [[package]]
@@ -23,6 +23,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "cloakbrowser" },
     { name = "httpx", extra = ["http2"] },
+    { name = "playwright" },
     { name = "python-dotenv" },
 ]
 
@@ -43,6 +44,7 @@ dev = [
 requires-dist = [
     { name = "cloakbrowser", specifier = ">=0.3.0" },
     { name = "httpx", extras = ["http2"], specifier = ">=0.24.0" },
+    { name = "playwright", specifier = ">=1.55.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
 ]
 

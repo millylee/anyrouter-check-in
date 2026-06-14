@@ -86,6 +86,41 @@
 - `provider` (可选)：指定使用的服务商，默认为 `anyrouter`
 - `name` (可选)：自定义账号显示名称，用于通知和日志中标识账号
 
+### GitHub OAuth/TOTP 模式（可选）
+
+如果账号已经绑定 AnyRouter 的 GitHub 登录，也可以使用 `checkin_github_oauth.py` 与 `AnyRouter GitHub OAuth 自动签到` workflow。该模式通过浏览器完成 GitHub OAuth，然后在浏览器上下文中调用 AnyRouter 签到接口，适合被 WAF 拦截的环境。
+
+该实现参考了 [liukaizheng/anyrouter-check-in](https://github.com/liukaizheng/anyrouter-check-in) 的 GitHub OAuth 浏览器流程，并针对本仓库的 Python/Playwright 与 GitHub Actions 运行方式做了适配。
+
+在仓库 `Settings -> Environments -> production -> Environment secrets` 中添加：
+
+- `ANYROUTER_GITHUB_ACCOUNTS`：GitHub OAuth 账号配置（JSON 数组）
+- `ANYROUTER_GITHUB_DEVICE_CODES`：可选，仅当 GitHub 临时要求邮箱设备验证码时使用
+
+`ANYROUTER_GITHUB_ACCOUNTS` 示例：
+
+```json
+[
+  {
+    "name": "github-main",
+    "github_username": "your_github_email@example.com",
+    "github_password": "your_github_password",
+    "totp_secret": "BASE32TOTPSECRET"
+  }
+]
+```
+
+`ANYROUTER_GITHUB_DEVICE_CODES` 示例：
+
+```json
+{
+  "github-main": "123456",
+  "your_github_email@example.com": "123456"
+}
+```
+
+通常启用 GitHub TOTP 后无需 `GITHUB_DEVICE_CODES`。如果 GitHub 因新设备或新 IP 额外要求邮箱验证码，可以手动触发 workflow，临时配置该 secret 让脚本保存 GitHub 登录态。
+
 **默认值说明**：
 
 - 如果未提供 `provider` 字段，默认使用 `anyrouter`（向后兼容）
