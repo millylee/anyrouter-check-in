@@ -15,18 +15,19 @@
 
 用于 Claude Code 中转站 Any Router 网站多账号每日签到，一次 $25，限时注册即送 100 美金，[点击这里注册](https://anyrouter.top/register?aff=gSsN)。业界良心，支持 Claude Sonnet 4.5、GPT-5-Codex、Claude Code 百万上下文（使用 `/model sonnet[1m]` 开启），`gemini-2.5-pro` 模型。
 
-## 本 fork 说明
+## GitHub OAuth 扩展说明
 
-本仓库 fork 自 [millylee/anyrouter-check-in](https://github.com/millylee/anyrouter-check-in)，保留了上游的多 Provider、Cookie/邮箱密码登录、CloakBrowser WAF 绕过、通知与测试体系。
+当前代码基于 [millylee/anyrouter-check-in](https://github.com/millylee/anyrouter-check-in)，保留了上游的多 Provider、Cookie/邮箱密码登录、CloakBrowser WAF 绕过、通知与测试体系。
 
-在此基础上，本 fork 额外加入了 AnyRouter GitHub OAuth/TOTP 签到路径：
+在此基础上，额外加入了 AnyRouter GitHub OAuth/TOTP 签到路径：
 
 - 新增 `checkin_github_oauth.py`，使用 Python + Playwright Chromium 完成 GitHub OAuth 登录与 AnyRouter 签到。
 - 新增 `AnyRouter GitHub OAuth 自动签到` GitHub Actions workflow，读取 `ANYROUTER_GITHUB_ACCOUNTS` secret，支持 TOTP、登录态缓存、手动指定账号运行。
-- GitHub OAuth 流程参考了 [liukaizheng/anyrouter-check-in](https://github.com/liukaizheng/anyrouter-check-in)，但实现方式不同：本 fork 是 Python/Playwright + GitHub Actions 适配；同时处理 AnyRouter WAF、OAuth code 被前端提前消费、只保存 GitHub 登录态、失败通知等运行细节。
-- 与上游 fork 的主要差异是新增 GitHub OAuth/TOTP 路线；原有 Cookie/邮箱密码路线仍保留。
+- GitHub OAuth/TOTP 流程参考了 [liukaizheng/anyrouter-check-in](https://github.com/liukaizheng/anyrouter-check-in)，尤其是其 README 中的 [GitHub OAuth Session Acquisition 流程示意](https://github.com/liukaizheng/anyrouter-check-in#github-oauth-session-acquisition-detailed) 与 TOTP 处理说明。
+- 与参考项目的实现差异：参考项目使用 Rust/chromiumoxide；这里使用 Python/Playwright，并适配本仓库已有的依赖、通知和 GitHub Actions 结构。
+- 与上游项目的主要差异：新增 GitHub OAuth/TOTP 路线；原有 Cookie/邮箱密码路线仍保留。
 
-目前差异仍属于“在上游基础上的可选增强”，还没大到必须脱离 fork。如果后续决定删除上游的通用 Provider/CloakBrowser 逻辑，只保留 GitHub OAuth/TOTP 专用签到器，再考虑新建独立仓库会更合适。
+如果只需要 GitHub OAuth/TOTP 专用签到器，也可以直接参考上面的 Rust 实现；如果需要兼容上游已有的多 Provider 和通知能力，可以使用这里的 Python/Playwright 扩展路径。
 
 运行上建议只选择一个自动调度入口：服务器 cron 或 GitHub Actions 定时二选一。两边都跑虽然可行，但同一批 GitHub 账号每天从两个环境登录/OAuth，会增加不必要的风控面；另一个入口保留为手动备份即可。
 
@@ -36,7 +37,7 @@
 - ✅ 单个/多账号自动签到
 - ✅ 多种机器人通知（可选）
 - ✅ 绕过 WAF 限制
-- ✅ GitHub OAuth + TOTP 签到模式（本 fork 新增）
+- ✅ GitHub OAuth + TOTP 签到模式
 
 ## 使用方法
 
