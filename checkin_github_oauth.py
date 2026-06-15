@@ -14,12 +14,15 @@ import json
 import os
 import random
 import re
+import secrets
 import sys
 import time
 from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
 from dotenv import load_dotenv
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright
 
 load_dotenv()
@@ -111,35 +114,37 @@ def generate_totp(secret: str) -> str:
 
 
 def github_device_code(account: dict) -> str:
-	single = (os.getenv('ANYROUTER_GITHUB_DEVICE_CODE') or os.getenv('GITHUB_DEVICE_CODE', '')).strip()
+	single = (os.getenv('ANYROUTER_GITHUB_DEVICE_CODE') or os.getenv('GITHUB_DEVICE_CODE') or '').strip()
 	if single:
 		return single
 
-	raw = (os.getenv('ANYROUTER_GITHUB_DEVICE_CODES') or os.getenv('GITHUB_DEVICE_CODES', '')).strip()
+	raw = (os.getenv('ANYROUTER_GITHUB_DEVICE_CODES') or os.getenv('GITHUB_DEVICE_CODES') or '').strip()
 	if not raw:
 		return ''
 
+	mapping: dict[str, Any]
 	try:
-		mapping = json.loads(raw)
+		raw_mapping = json.loads(raw)
+		mapping = raw_mapping if isinstance(raw_mapping, dict) else {}
 	except Exception:
 		mapping = {}
 		for item in raw.split(','):
 			if '=' in item:
-				key, value = item.split('=', 1)
+				item_key, value = item.split('=', 1)
 			elif ':' in item:
-				key, value = item.split(':', 1)
+				item_key, value = item.split(':', 1)
 			else:
 				continue
-			mapping[key.strip()] = value.strip()
+			mapping[item_key.strip()] = value.strip()
 
-	for key in (account.get('name'), account.get('github_username')):
-		if key and str(mapping.get(key, '')).strip():
-			return str(mapping[key]).strip()
+	for lookup_key in (str(account.get('name') or ''), str(account.get('github_username') or '')):
+		if lookup_key and str(mapping.get(lookup_key, '')).strip():
+			return str(mapping[lookup_key]).strip()
 	return ''
 
 
 async def safe_click_authorize(page) -> str:
-	return await page.evaluate(
+	result = await page.evaluate(
 		"""() => {
 			const blocked = /cancel|deny|decline|return|back|取消|拒绝|返回/i;
 			const allowed = /authorize|authorise|allow|approve|授权|允许|同意/i;
@@ -176,6 +181,7 @@ async def safe_click_authorize(page) -> str:
 			return '';
 		}"""
 	)
+	return str(result or '')
 
 
 async def switch_to_totp(page) -> None:
@@ -196,14 +202,15 @@ async def switch_to_totp(page) -> None:
 
 
 async def page_summary(page) -> str:
-	return await page.evaluate(
+	result = await page.evaluate(
 		"""() => document.body.innerText
 			.split("\\n")
 			.map((line) => line.trim())
 			.filter(Boolean)
 			.slice(0, 8)
-			.join(" | ")"""
+				.join(" | ")"""
 	)
+	return str(result or '')
 
 
 async def fill_totp_if_needed(page, account: dict) -> None:
@@ -261,16 +268,16 @@ async def fill_totp_if_needed(page, account: dict) -> None:
 	await field.fill(code)
 	try:
 		await page.wait_for_url(lambda url: url != old_url, timeout=15000)
-	except Exception:
-		pass
+	except PlaywrightTimeoutError:
+		print('  - verification submit did not navigate before timeout')
 	await page.wait_for_timeout(3000)
 
 
 async def wait_for_settle(page, timeout: int = 10000) -> None:
 	try:
 		await page.wait_for_load_state('domcontentloaded', timeout=timeout)
-	except Exception:
-		pass
+	except PlaywrightTimeoutError:
+		print(f'  - page did not reach domcontentloaded within {timeout}ms')
 	await page.wait_for_timeout(1000)
 
 
@@ -280,10 +287,10 @@ async def goto_document(page, url: str):
 	return response
 
 
-async def browser_json(page, path: str, method: str = 'GET', headers: dict | None = None) -> dict:
-	last = None
+async def browser_json(page, path: str, method: str = 'GET', headers: dict | None = None) -> dict[str, Any]:
+	last: dict[str, Any] | None = None
 	for _ in range(8):
-		result = await page.evaluate(
+		raw_result = await page.evaluate(
 			"""async ({path, method, headers}) => {
 				const response = await fetch(path, {
 					method,
@@ -304,6 +311,12 @@ async def browser_json(page, path: str, method: str = 'GET', headers: dict | Non
 			}""",
 			{'path': path, 'method': method, 'headers': headers or {}},
 		)
+		if not isinstance(raw_result, dict):
+			last = {'status': 'unknown', 'contentType': 'unknown', 'sample': str(raw_result)[:160]}
+			await page.wait_for_timeout(3000)
+			continue
+
+		result: dict[str, Any] = raw_result
 		last = result
 		if result.get('data') is not None:
 			return result
@@ -509,14 +522,16 @@ async def main() -> int:
 	failed = 0
 
 	if not no_delay and START_DELAY_MAX_SECONDS > 0:
-		start_delay = random.randint(0, START_DELAY_MAX_SECONDS)
+		start_delay = secrets.randbelow(START_DELAY_MAX_SECONDS + 1)
 		print(f'startup random delay: {start_delay}s')
 		await asyncio.sleep(start_delay)
 
 	async with async_playwright() as playwright:
 		for index, account in enumerate(accounts[:limit]):
 			if index > 0 and not no_delay:
-				delay = random.randint(ACCOUNT_DELAY_MIN_SECONDS, ACCOUNT_DELAY_MAX_SECONDS)
+				delay = ACCOUNT_DELAY_MIN_SECONDS + secrets.randbelow(
+					ACCOUNT_DELAY_MAX_SECONDS - ACCOUNT_DELAY_MIN_SECONDS + 1
+				)
 				print(f'delay before next account: {delay}s')
 				await asyncio.sleep(delay)
 			ok = await check_account(playwright, account, index)
