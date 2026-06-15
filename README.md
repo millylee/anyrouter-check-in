@@ -29,7 +29,7 @@
 
 如果只需要 GitHub OAuth/TOTP 专用签到器，也可以直接参考上面的 Rust 实现；如果需要兼容上游已有的多 Provider 和通知能力，可以使用这里的 Python/Playwright 扩展路径。
 
-运行上建议只选择一个自动调度入口：服务器 cron 或 GitHub Actions 定时二选一。两边都跑虽然可行，但同一批 GitHub 账号每天从两个环境登录/OAuth，会增加不必要的风控面；另一个入口保留为手动备份即可。
+为避免影响上游默认定时任务，新增的 GitHub OAuth workflow 默认只支持 `workflow_dispatch` 手动触发，不会替代或干扰原有 `AnyRouter 自动签到` workflow。确认 `ANYROUTER_GITHUB_ACCOUNTS` 配置可用后，如需定时执行，可以自行给该 workflow 增加 `schedule`。
 
 ## 功能特性
 
@@ -137,6 +137,8 @@
 ```
 
 通常启用 GitHub TOTP 后无需 `ANYROUTER_GITHUB_DEVICE_CODES`。如果 GitHub 因新设备或新 IP 额外要求邮箱验证码，可以手动触发 workflow，临时配置该 secret 让脚本保存 GitHub 登录态。
+
+该 workflow 默认只手动运行，不会改变原有 `AnyRouter 自动签到` workflow 的定时行为；需要 GitHub OAuth 定时任务时，可在 `.github/workflows/github-oauth-checkin.yml` 中按需增加 `schedule`。
 
 **默认值说明**：
 

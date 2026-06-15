@@ -1,9 +1,6 @@
 name: AnyRouter GitHub OAuth 自动签到
 
 on:
-  schedule:
-    # Runs daily at 10:17 Asia/Shanghai, then script adds random jitter.
-    - cron: '17 2 * * *'
   workflow_dispatch:
     inputs:
       account_only:
