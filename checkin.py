@@ -219,12 +219,25 @@ async def login_with_credentials(
 		}
 		api_user = str(user_profile['id']) if user_profile.get('id') is not None else None
 
+		user_info = None
+		quota_raw = user_profile.get('quota', 0)
+		used_raw = user_profile.get('used_quota', 0)
+		if quota_raw or used_raw:
+			quota = round(quota_raw / 500000, 2)
+			used_quota = round(used_raw / 500000, 2)
+			user_info = {
+				'success': True,
+				'quota': quota,
+				'used_quota': used_quota,
+				'display': f':money: Current balance: ${quota}, Used: ${used_quota}',
+			}
+
 		success_msg = f'[SUCCESS] {account_name}: Login successful, got {len(all_cookies)} cookies'
 		if is_debug_enabled() and api_user:
 			success_msg += f', api_user={api_user}'
 		print(success_msg)
 		await context.close()
-		return BrowserLoginResult(cookies=all_cookies, api_user=api_user)
+		return BrowserLoginResult(cookies=all_cookies, api_user=api_user, user_info=user_info)
 
 	except Exception as e:
 		print(f'[FAILED] {account_name}: Error during login: {e}')
@@ -380,6 +393,14 @@ async def check_in_account(account: AccountConfig, account_index: int, app_confi
 			all_cookies = login_result.cookies
 			resolved_api_user = login_result.api_user
 			auth_method = 'email/password'
+
+			if not provider_config.needs_manual_check_in():
+				user_info = login_result.user_info
+				if user_info and user_info.get('success'):
+					print(f'[INFO] {account_name}: Check-in completed during browser login')
+					print(user_info['display'])
+					return True, None, user_info
+				return False, None, None
 		else:
 			print(f'[FAILED] {account_name}: Email/password login failed, will not use stale session cookies')
 			return False, None, None
