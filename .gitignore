@@ -11,5 +11,8 @@ htmlcov
 balance_hash.txt
 .browser_profiles
 checkin_screenshots
+data/
+ui/data/
+dashboard_build/
 
 .DS_Store

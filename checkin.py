@@ -41,6 +41,10 @@ from utils.proxy import get_playwright_proxy, get_proxy_server
 load_dotenv()
 
 BALANCE_HASH_FILE = 'balance_hash.txt'
+DASHBOARD_DATA_DIR = 'data'
+LATEST_DATA_FILE = os.path.join(DASHBOARD_DATA_DIR, 'latest.json')
+HISTORY_DATA_FILE = os.path.join(DASHBOARD_DATA_DIR, 'history.json')
+MAX_HISTORY_ENTRIES = 365
 
 
 def load_balance_hash():
@@ -70,6 +74,159 @@ def generate_balance_hash(balances):
 	)
 	balance_json = json.dumps(simple_balances, sort_keys=True, separators=(',', ':'))
 	return hashlib.sha256(balance_json.encode('utf-8')).hexdigest()[:16]
+
+
+def _ensure_data_dir():
+	"""确保 data 目录存在"""
+	os.makedirs(DASHBOARD_DATA_DIR, exist_ok=True)
+
+
+def _load_history_data() -> list:
+	"""加载历史数据"""
+	try:
+		if os.path.exists(HISTORY_DATA_FILE):
+			with open(HISTORY_DATA_FILE, 'r', encoding='utf-8') as f:
+				data = json.load(f)
+				if isinstance(data, list):
+					return data
+	except Exception:
+		pass
+	return []
+
+
+def build_dashboard_data(
+	accounts: list[AccountConfig],
+	account_details: dict,
+	success_count: int,
+	total_count: int,
+) -> dict:
+	"""构建仪表盘数据"""
+	now = datetime.now().isoformat(timespec='seconds')
+
+	account_list = []
+	total_balance = 0.0
+	total_used = 0.0
+	failed_count = 0
+	checked_today = 0
+
+	for i, account in enumerate(accounts):
+		account_key = f'account_{i + 1}'
+		detail = account_details.get(account_key)
+		name = account.get_display_name(i)
+
+		status = '正常'
+		success = False
+		check_in_message = ''
+		balance = 0.0
+		used = 0.0
+		check_in_reward = 0.0
+		usage_increase = 0.0
+		last_check_in = None
+
+		if detail:
+			success = detail.get('success', False)
+			balance = detail.get('after_quota', 0.0)
+			used = detail.get('after_used', 0.0)
+			check_in_reward = detail.get('check_in_reward', 0.0)
+			usage_increase = detail.get('usage_increase', 0.0)
+
+			if success:
+				checked_today += 1
+				if check_in_reward > 0:
+					check_in_message = f'签到成功，获得 ${check_in_reward:.2f} 额度'
+				elif usage_increase > 0:
+					check_in_message = f'今日已签到（期间消耗 ${usage_increase:.2f}）'
+				else:
+					check_in_message = '今日已签到'
+			else:
+				failed_count += 1
+				status = '异常'
+				check_in_message = '签到失败'
+			last_check_in = now
+		else:
+			failed_count += 1
+			status = '异常'
+			check_in_message = '签到失败'
+
+		total_balance += balance
+		total_used += used
+
+		account_list.append({
+			'name': name,
+			'provider': account.provider,
+			'status': status,
+			'check_in_success': success,
+			'check_in_message': check_in_message,
+			'balance': round(balance, 2),
+			'used': round(used, 2),
+			'total_quota': round(balance + used, 2),
+			'check_in_reward': round(check_in_reward, 2),
+			'usage_increase': round(usage_increase, 2),
+			'last_check_in': last_check_in,
+		})
+
+	total_quota = total_balance + total_used
+	queried_count = len(account_details)
+
+	summary = {
+		'total_accounts': total_count,
+		'checked_in_today': checked_today,
+		'failed_accounts': failed_count,
+		'session_expired': 0,
+		'total_balance': round(total_balance, 2),
+		'total_used': round(total_used, 2),
+		'total_quota': round(total_quota, 2),
+		'queried_count': queried_count,
+		'total_requests': 0,
+		'request_used_quota': 0,
+		'last_query_time': now,
+		'total_runs': 0,
+		'last_run_time': now,
+		'notify_status': '已配置',
+		'retry_interval_minutes': 30,
+	}
+
+	return {
+		'timestamp': now,
+		'summary': summary,
+		'accounts': account_list,
+	}
+
+
+def save_dashboard_data(
+	accounts: list[AccountConfig],
+	account_details: dict,
+	success_count: int,
+	total_count: int,
+):
+	"""保存仪表盘数据到文件"""
+	try:
+		_ensure_data_dir()
+		data = build_dashboard_data(accounts, account_details, success_count, total_count)
+
+		with open(LATEST_DATA_FILE, 'w', encoding='utf-8') as f:
+			json.dump(data, f, ensure_ascii=False, indent=2)
+		print(f'[INFO] Dashboard latest data saved to {LATEST_DATA_FILE}')
+
+		history = _load_history_data()
+		history.insert(0, data)
+		if len(history) > MAX_HISTORY_ENTRIES:
+			history = history[:MAX_HISTORY_ENTRIES]
+
+		with open(HISTORY_DATA_FILE, 'w', encoding='utf-8') as f:
+			json.dump(history, f, ensure_ascii=False, indent=2)
+		print(f'[INFO] Dashboard history data saved to {HISTORY_DATA_FILE} ({len(history)} entries)')
+
+		history_summary = {
+			'total_runs': len(history),
+			'last_run_time': data['timestamp'],
+		}
+		data['summary']['total_runs'] = len(history)
+		with open(LATEST_DATA_FILE, 'w', encoding='utf-8') as f:
+			json.dump(data, f, ensure_ascii=False, indent=2)
+
+	except Exception as e:
+		print(f'[WARN] Failed to save dashboard data: {e}')
 
 
 def parse_cookies(cookies_data):
@@ -599,6 +756,8 @@ async def main():
 
 	if current_balance_hash:
 		save_balance_hash(current_balance_hash)
+
+	save_dashboard_data(accounts, account_check_in_details, success_count, total_count)
 
 	if need_notify and notification_content:
 		summary = [

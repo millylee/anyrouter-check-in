@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AnyRouter 签到管理控制台</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-icon">AR</div>
+      <div class="logo-text">
+        <div class="logo-title">AnyRouter</div>
+        <div class="logo-subtitle">签到管理控制台</div>
+      </div>
+    </div>
+    <nav class="menu">
+      <a href="#" class="menu-item active">
+        <span class="menu-icon">👤</span>账号
+      </a>
+      <a href="#" class="menu-item">
+        <span class="menu-icon">📋</span>记录
+      </a>
+      <a href="#" class="menu-item">
+        <span class="menu-icon">🔔</span>通知设置
+      </a>
+      <a href="#" class="menu-item">
+        <span class="menu-icon">🛡️</span>用户管理
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <span class="user-dot"></span>
+        <span class="user-name">管理员</span>
+      </div>
+      <button class="footer-btn">🌙 深色模式</button>
+      <button class="footer-btn">🚪 退出登录</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1 class="page-title">账号</h1>
+        <div class="top-tabs">
+          <span class="tab active">邀请码</span>
+          <span class="tab">AR 自动签到</span>
+          <span class="tab">D1 多用户数据</span>
+          <span class="tab">TG 独立通知</span>
+          <span class="tab">BAL 余额查询</span>
+          <span class="tab">INV 邀请码</span>
+        </div>
+        <div class="page-subtitle">
+          分页浏览、跨页排序、新增、编辑、删除后立即写入 D1
+        </div>
+        <div class="sub-tabs">
+          <span class="sub-tab active">存储</span>
+          <span class="sub-tab">HIS 历史记录</span>
+          <span class="sub-tab">ADM 管理员</span>
+          <span class="sub-tab">KV 会话</span>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-primary">＋ 新增账号</button>
+        <button class="btn btn-secondary">刷新</button>
+        <button class="btn btn-dark">立即签到</button>
+      </div>
+    </header>
+
+    <section class="cards">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">账号概览</span>
+          <span class="card-badge">AC</span>
+        </div>
+        <div class="card-grid">
+          <div class="stat">
+            <div class="stat-label">账号总数</div>
+            <div class="stat-value" id="totalAccounts">--</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">今日已签</div>
+            <div class="stat-value" id="checkedToday">--</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">失败账号</div>
+            <div class="stat-value" id="failedAccounts">--</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Session 失效</div>
+            <div class="stat-value" id="sessionExpired">--</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">余额概览</span>
+          <span class="card-badge blue">BL</span>
+        </div>
+        <div class="card-grid">
+          <div class="stat">
+            <div class="stat-label">余额合计</div>
+            <div class="stat-value money" id="totalBalance">--</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">已用合计</div>
+            <div class="stat-value money" id="totalUsed">--</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">总额合计</div>
+            <div class="stat-value money" id="totalQuota">--</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">已查询</div>
+            <div class="stat-value" id="queriedCount">--</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">使用统计</span>
+          <span class="card-badge cyan">US</span>
+        </div>
+        <div class="card-grid">
+          <div class="stat">
+            <div class="stat-label">请求次数</div>
+            <div class="stat-value" id="totalRequests">--</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">统计额度</div>
+            <div class="stat-value money" id="requestUsedQuota">--</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">已查询</div>
+            <div class="stat-value" id="usQueried">--</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">最近查询</div>
+            <div class="stat-value small" id="lastQueryTime">--</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">运行概览</span>
+          <span class="card-badge pink">RN</span>
+        </div>
+        <div class="card-grid">
+          <div class="stat">
+            <div class="stat-label">历史批次</div>
+            <div class="stat-value" id="totalRuns">--</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">最近运行</div>
+            <div class="stat-value small" id="lastRunTime">--</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">通知状态</div>
+            <div class="stat-value status-badge success" id="notifyStatus">--</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">失败重试</div>
+            <div class="stat-value" id="retryInterval">--</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="account-section">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">账号列表</h2>
+          <div class="section-subtitle" id="listInfo">加载中...</div>
+        </div>
+        <div class="pagination">
+          <button class="page-btn">|<</button>
+          <button class="page-btn"><</button>
+          <span class="page-num">1 / 1</span>
+          <button class="page-btn">></button>
+          <button class="page-btn">>|</button>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <table class="account-table">
+          <thead>
+            <tr>
+              <th style="width: 40px;"></th>
+              <th>名称</th>
+              <th style="width: 120px;">NEW-API-USER</th>
+              <th style="width: 200px;">COOKIE</th>
+              <th style="width: 100px;">状态</th>
+              <th style="width: 260px;">余额</th>
+              <th style="width: 300px;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="accountTbody">
+            <tr><td colspan="7" class="loading">加载中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

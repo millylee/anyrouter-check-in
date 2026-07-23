@@ -133,6 +133,28 @@ jobs:
       if: always()
       run: bash scripts/stop_mihomo_proxy.sh
 
+    - name: 构建 Dashboard 页面
+      if: always()
+      run: |
+        mkdir -p dashboard_build
+        cp -r ui/* dashboard_build/
+        if [ -d data ]; then
+          cp -r data dashboard_build/
+        fi
+        echo "✅ Dashboard 构建完成"
+        ls -la dashboard_build/
+
+    - name: 发布到 GitHub Pages
+      if: always()
+      uses: peaceiris/actions-gh-pages@v4
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./dashboard_build
+        publish_branch: gh-pages
+        keep_files: true
+        user_name: "github-actions[bot]"
+        user_email: "github-actions[bot]@users.noreply.github.com"
+
     - name: 执行结果
       if: always()
       run: |
@@ -142,3 +164,5 @@ jobs:
           echo "调试截图已上传为 artifact: checkin-screenshots-${{ github.run_id }}"
           ls -la checkin_screenshots/
         fi
+        echo ""
+        echo "📊 Dashboard: https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/"
