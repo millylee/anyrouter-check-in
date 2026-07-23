@@ -151,19 +151,21 @@ def build_dashboard_data(
 		total_balance += balance
 		total_used += used
 
-		account_list.append({
-			'name': name,
-			'provider': account.provider,
-			'status': status,
-			'check_in_success': success,
-			'check_in_message': check_in_message,
-			'balance': round(balance, 2),
-			'used': round(used, 2),
-			'total_quota': round(balance + used, 2),
-			'check_in_reward': round(check_in_reward, 2),
-			'usage_increase': round(usage_increase, 2),
-			'last_check_in': last_check_in,
-		})
+		account_list.append(
+			{
+				'name': name,
+				'provider': account.provider,
+				'status': status,
+				'check_in_success': success,
+				'check_in_message': check_in_message,
+				'balance': round(balance, 2),
+				'used': round(used, 2),
+				'total_quota': round(balance + used, 2),
+				'check_in_reward': round(check_in_reward, 2),
+				'usage_increase': round(usage_increase, 2),
+				'last_check_in': last_check_in,
+			}
+		)
 
 	total_quota = total_balance + total_used
 	queried_count = len(account_details)
