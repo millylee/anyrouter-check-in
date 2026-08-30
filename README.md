@@ -7,7 +7,7 @@
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![License](https://img.shields.io/github/license/millylee/anyrouter-check-in)](LICENSE)
 
-多平台多账号自动签到，理论上支持所有 NewAPI、OneAPI 平台，目前内置支持 Any Router 与 Agent Router，其它可根据文档进行摸索配置。
+多平台多账号自动签到，理论上支持所有 NewAPI、OneAPI 平台，目前内置支持 Any Router、Agent Router 与 SOTA Model，其它可根据文档进行摸索配置。
 
 推荐搭配使用[Auo](https://github.com/millylee/auo)，支持任意 Claude Code Token 切换的工具。
 
@@ -90,7 +90,7 @@
 
 - 如果未提供 `provider` 字段，默认使用 `anyrouter`（向后兼容）
 - 如果未提供 `name` 字段，会使用 `Account 1`、`Account 2` 等默认名称
-- `anyrouter` 与 `agentrouter` 配置已内置，无需填写
+- `anyrouter`、`agentrouter` 与 `sotamodel` 配置已内置，无需填写
 
 如果使用 session cookies 登录，接下来获取 cookies 与 api_user 的值。
 
@@ -180,9 +180,42 @@
 ]
 ```
 
+### SOTA Model 配置
+
+[SOTA Model](https://sotamodel.net/) 的签到入口在 [/agents](https://sotamodel.net/agents) 页面底部的 **Daily Check-in** 卡片，对应接口 `/api/user/sota-agent-checkin`，每天可领一次额度。
+
+该站点没有 WAF、也未开启 Turnstile 人机校验，因此**直接调用 JSON 登录接口**完成登录，不需要启动浏览器，比其它平台更快更稳定。只填邮箱和密码即可，`api_user` 会在登录后自动获取：
+
+```json
+[
+  {
+    "name": "SOTA Model",
+    "provider": "sotamodel",
+    "email": "your@email.com",
+    "password": "your_password"
+  }
+]
+```
+
+也支持 session cookies 方式（需要自行填写 `api_user`）：
+
+```json
+[
+  {
+    "provider": "sotamodel",
+    "cookies": {
+      "session": "abc123session"
+    },
+    "api_user": "user123"
+  }
+]
+```
+
+> 注意：开启了两步验证（2FA）的账号无法自动登录，脚本会明确报错提示。
+
 ## 自定义 Provider 配置（可选）
 
-默认情况下，`anyrouter`、`agentrouter` 已内置配置，无需额外设置。如果你需要使用其他服务商，可以通过环境变量 `PROVIDERS` 配置：
+默认情况下，`anyrouter`、`agentrouter`、`sotamodel` 已内置配置，无需额外设置。如果你需要使用其他服务商，可以通过环境变量 `PROVIDERS` 配置：
 
 ### 基础配置（仅域名）
 
@@ -219,7 +252,7 @@
 - 不设置或设置为 `null`：直接使用用户提供的 cookies 进行请求（适合无 WAF 保护的网站）
 - 设置为 `"waf_cookies"`：使用 CloakBrowser 打开浏览器获取 WAF cookies 后再进行请求（适合有 WAF 保护的网站）
 
-> 注：`anyrouter` 和 `agentrouter` 已内置默认配置，无需在 `PROVIDERS` 中配置
+> 注：`anyrouter`、`agentrouter` 和 `sotamodel` 已内置默认配置，无需在 `PROVIDERS` 中配置
 
 ### 在 GitHub Actions 中配置
 
@@ -239,6 +272,11 @@
   - `"waf_cookies"`：使用 CloakBrowser 打开浏览器获取 WAF cookies 后再执行签到
   - 不设置或 `null`：直接使用用户 cookies 执行签到（适合无 WAF 保护的网站）
 - `waf_cookie_names` (可选)：绕过 WAF 所需 cookie 的名称列表，`bypass_method` 为 `waf_cookies` 时必须设置
+- `login_method` (可选)：邮箱密码登录方式，默认为 `browser`
+  - `"browser"`：用 CloakBrowser 打开登录页填表单（适合有 WAF 或人机校验的站点）
+  - `"api"`：直接 POST 登录接口，不启动浏览器（适合无 WAF、无 Turnstile 的站点，更快更稳定）
+- `login_api_path` (可选)：JSON 登录接口路径，默认为 `/api/user/login`，仅 `login_method` 为 `"api"` 时使用
+- `check_in_status_path` (可选)：签到状态查询接口路径。设置后会先 GET 该接口，若返回 `checked_in_today: true` 就跳过签到请求。比匹配服务端多语言提示更可靠
 
 **配置示例**（完整）：
 
@@ -264,10 +302,17 @@
   - `bypass_method: "waf_cookies"`（需要获取 `acw_tc`）
   - `sign_in_path: null`（查询用户信息时自动签到）
   - `use_proxy: true`
+- `sotamodel`：
+  - `login_method: "api"`（直接调用 JSON 登录接口，不启动浏览器）
+  - `login_path: "/sign-in"`
+  - `sign_in_path: "/api/user/sota-agent-checkin"`（`/agents` 页面底部的 Daily Check-in）
+  - `check_in_status_path: "/api/user/sota-agent-checkin"`（GET 查询 `checked_in_today`）
+  - `bypass_method: null`（无 WAF）
+  - `use_proxy: false`
 
 **重要提示**：
 
-- `PROVIDERS` 是可选的，不配置则使用内置的 `anyrouter` 和 `agentrouter`
+- `PROVIDERS` 是可选的，不配置则使用内置的 `anyrouter`、`agentrouter` 和 `sotamodel`
 - 自定义的 provider 配置会覆盖同名的默认配置
 
 ## 代理配置（可选）

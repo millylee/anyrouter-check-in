@@ -23,6 +23,9 @@ class ProviderConfig:
 	waf_cookie_names: List[str] | None = None
 	use_proxy: bool = False
 	persist_profile: bool = False
+	login_method: Literal['browser', 'api'] = 'browser'
+	login_api_path: str = '/api/user/login'
+	check_in_status_path: str | None = None
 
 	def __post_init__(self):
 		required_waf_cookies = set()
@@ -61,6 +64,9 @@ class ProviderConfig:
 			waf_cookie_names=data.get('waf_cookie_names', defaults.waf_cookie_names if defaults else None),
 			use_proxy=data.get('use_proxy', default_use_proxy),
 			persist_profile=data.get('persist_profile', default_persist_profile),
+			login_method=data.get('login_method', defaults.login_method if defaults else 'browser'),
+			login_api_path=data.get('login_api_path', defaults.login_api_path if defaults else '/api/user/login'),
+			check_in_status_path=data.get('check_in_status_path', defaults.check_in_status_path if defaults else None),
 		)
 
 	def needs_waf_cookies(self) -> bool:
@@ -70,6 +76,10 @@ class ProviderConfig:
 	def needs_manual_check_in(self) -> bool:
 		"""判断是否需要手动调用签到接口"""
 		return self.sign_in_path is not None
+
+	def uses_api_login(self) -> bool:
+		"""判断邮箱密码登录是否直接调用 JSON 接口（无需启动浏览器）"""
+		return self.login_method == 'api'
 
 
 @dataclass
@@ -105,6 +115,24 @@ class AppConfig:
 				waf_cookie_names=['acw_tc'],
 				use_proxy=True,
 				persist_profile=False,
+			),
+			'sotamodel': ProviderConfig(
+				name='sotamodel',
+				domain='https://sotamodel.net',
+				login_path='/sign-in',
+				# 签到入口在 /agents 页面底部（Daily Check-in），对应 sota-agent-checkin 接口
+				sign_in_path='/api/user/sota-agent-checkin',
+				user_info_path='/api/user/self',
+				api_user_key='new-api-user',
+				bypass_method=None,  # 站点为纯 nginx，无 WAF 验证
+				waf_cookie_names=None,
+				use_proxy=False,
+				persist_profile=False,
+				# 前端是 React + Tailwind，与 Semi Design 选择器不兼容，直接走 JSON 登录接口
+				login_method='api',
+				login_api_path='/api/user/login',
+				# 同一路径 GET 返回 checked_in_today，比匹配多语言提示更可靠
+				check_in_status_path='/api/user/sota-agent-checkin',
 			),
 		}
 

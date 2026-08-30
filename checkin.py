@@ -19,6 +19,7 @@ import httpx
 from cloakbrowser import launch_async
 from dotenv import load_dotenv
 
+from utils.api_login import login_via_api
 from utils.browser import (
 	BrowserLoginResult,
 	has_session_cookie,
@@ -277,12 +278,68 @@ async def prepare_cookies(account_name: str, provider_config, user_cookies: dict
 	return {**waf_cookies, **user_cookies}
 
 
+ALREADY_CHECKED_IN_KEYWORDS = (
+	'已经签到',
+	'已签到',
+	'重复签到',
+	'仅可签到一次',
+	'already checked',
+	'already signed',
+	'already claimed',
+	'once per day',
+	'checked in today',
+)
+
+
+def is_already_checked_in(message: str) -> bool:
+	"""判断签到接口返回的失败信息是否其实代表“今日已签到”"""
+	if not message:
+		return False
+	lowered = message.lower()
+	return any(keyword in lowered for keyword in ALREADY_CHECKED_IN_KEYWORDS)
+
+
+def fetch_check_in_status(client, account_name: str, provider_config, headers: dict) -> dict | None:
+	"""查询签到状态。返回 None 表示该 provider 未提供状态接口或查询失败。
+
+	相比匹配服务端返回的多语言提示，checked_in_today 布尔值更可靠。
+	"""
+	status_path = getattr(provider_config, 'check_in_status_path', None)
+	if not status_path:
+		return None
+
+	try:
+		response = client.get(f'{provider_config.domain}{status_path}', headers=headers, timeout=30)
+		if response.status_code != 200:
+			debug_print(f'[INFO] {account_name}: Check-in status query returned HTTP {response.status_code}')
+			return None
+		payload = response.json()
+	except Exception as e:
+		debug_print(f'[INFO] {account_name}: Check-in status query failed: {str(e)[:80]}')
+		return None
+
+	data = payload.get('data')
+	if not payload.get('success') or not isinstance(data, dict):
+		debug_print(f'[INFO] {account_name}: Check-in status unavailable: {payload.get("message")}')
+		return None
+	return data
+
+
 def execute_check_in(client, account_name: str, provider_config, headers: dict):
 	"""执行签到请求"""
-	print(f'[NETWORK] {account_name}: Executing check-in')
-
 	checkin_headers = headers.copy()
 	checkin_headers.update({'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'})
+
+	status = fetch_check_in_status(client, account_name, provider_config, checkin_headers)
+	if status is not None:
+		reward = status.get('reward_credits')
+		if reward is not None:
+			print(f"[INFO] {account_name}: Today's check-in reward: ${reward}")
+		if status.get('checked_in_today') is True:
+			print(f'[SUCCESS] {account_name}: Already checked in today, skipping check-in request')
+			return True
+
+	print(f'[NETWORK] {account_name}: Executing check-in')
 
 	sign_in_url = f'{provider_config.domain}{provider_config.sign_in_path}'
 	response = client.post(sign_in_url, headers=checkin_headers, timeout=30)
@@ -297,8 +354,7 @@ def execute_check_in(client, account_name: str, provider_config, headers: dict):
 				return True
 			else:
 				error_msg = result.get('msg', result.get('message', 'Unknown error'))
-				already_checked_keywords = ['已经签到', '已签到', '重复签到', 'already checked', 'already signed']
-				if any(keyword in error_msg.lower() for keyword in already_checked_keywords):
+				if is_already_checked_in(error_msg):
 					print(f'[SUCCESS] {account_name}: Already checked in today')
 					return True
 				print(f'[FAILED] {account_name}: Check-in failed - {error_msg}')
@@ -369,17 +425,27 @@ async def check_in_account(account: AccountConfig, account_index: int, app_confi
 	if account.has_login_credentials():
 		print(f'[INFO] {account_name}: Attempting email/password login (priority)...')
 		assert account.email is not None and account.password is not None
-		login_result = await login_with_credentials(
-			account_name,
-			provider_config,
-			account.provider,
-			account.email,
-			account.password,
-		)
+		if provider_config.uses_api_login():
+			login_result = login_via_api(
+				account_name,
+				provider_config,
+				account.email,
+				account.password,
+				use_proxy=provider_config.use_proxy,
+			)
+			auth_method = 'email/password (API)'
+		else:
+			login_result = await login_with_credentials(
+				account_name,
+				provider_config,
+				account.provider,
+				account.email,
+				account.password,
+			)
+			auth_method = 'email/password'
 		if login_result:
 			all_cookies = login_result.cookies
 			resolved_api_user = login_result.api_user
-			auth_method = 'email/password'
 		else:
 			print(f'[FAILED] {account_name}: Email/password login failed, will not use stale session cookies')
 			return False, None, None
