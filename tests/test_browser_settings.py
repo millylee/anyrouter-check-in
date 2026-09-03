@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from utils.browser import launch_login_context, load_browser_login_settings
+from utils.browser import launch_login_context, load_browser_login_settings, navigate_login_page
 
 
 def test_browser_login_settings_records_profile_persistence(monkeypatch, tmp_path):
@@ -98,3 +98,74 @@ async def test_launch_login_context_closes_browser_for_ephemeral_context(monkeyp
 	assert context.closed is True
 	assert browser.closed is True
 	assert not settings.profile_dir.exists()
+
+
+@pytest.mark.asyncio
+async def test_navigate_login_page_retries_after_navigation_error(monkeypatch):
+	class FakePage:
+		def __init__(self):
+			self.login_goto_calls = 0
+			self.goto_calls = []
+
+		async def goto(self, url, **kwargs):
+			self.goto_calls.append((url, kwargs))
+			if url.endswith('/login'):
+				self.login_goto_calls += 1
+				if self.login_goto_calls == 1:
+					raise RuntimeError('net::ERR_NAME_NOT_RESOLVED')
+
+		async def evaluate(self, _script):
+			return True
+
+	page = FakePage()
+
+	async def _noop(*_args, **_kwargs):
+		return None
+
+	async def _zero(*_args, **_kwargs):
+		return 0
+
+	async def _true(*_args, **_kwargs):
+		return True
+
+	monkeypatch.setattr('utils.browser._settle_page', _noop)
+	monkeypatch.setattr('utils.browser.dismiss_popups', _zero)
+	monkeypatch.setattr('utils.browser._wait_for_login_shell', _true)
+	monkeypatch.setattr('utils.browser.wait_for_site_ready', _noop)
+	monkeypatch.setattr('utils.browser.asyncio.sleep', _noop)
+
+	await navigate_login_page(page, 'https://anyrouter.top/login', 60_000)
+
+	assert page.login_goto_calls == 2
+
+
+@pytest.mark.asyncio
+async def test_navigate_login_page_raises_after_retry_exhausted(monkeypatch):
+	class FakePage:
+		def __init__(self):
+			self.login_goto_calls = 0
+
+		async def goto(self, url, **kwargs):
+			if url.endswith('/login'):
+				self.login_goto_calls += 1
+				raise RuntimeError('net::ERR_NAME_NOT_RESOLVED')
+
+		async def evaluate(self, _script):
+			return True
+
+	page = FakePage()
+
+	async def _noop(*_args, **_kwargs):
+		return None
+
+	async def _zero(*_args, **_kwargs):
+		return 0
+
+	monkeypatch.setattr('utils.browser._settle_page', _noop)
+	monkeypatch.setattr('utils.browser.dismiss_popups', _zero)
+	monkeypatch.setattr('utils.browser.asyncio.sleep', _noop)
+
+	with pytest.raises(RuntimeError, match='ERR_NAME_NOT_RESOLVED'):
+		await navigate_login_page(page, 'https://anyrouter.top/login', 60_000)
+
+	assert page.login_goto_calls == 3

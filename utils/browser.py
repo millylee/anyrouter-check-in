@@ -345,8 +345,15 @@ async def navigate_login_page(
 
 	for attempt in range(3):
 		print(f'[INFO] Navigating login page (attempt {attempt + 1}/3): {login_url}')
-		await page.goto(login_url, wait_until='load', timeout=attempt_timeout)
-		await _settle_page(page, 5, 20_000)
+		try:
+			await page.goto(login_url, wait_until='load', timeout=attempt_timeout)
+			await _settle_page(page, 5, 20_000)
+		except Exception as exc:
+			print(f'[WARN] Login page navigation failed on attempt {attempt + 1}: {exc}')
+			if attempt < 2:
+				await asyncio.sleep(5)
+				continue
+			raise
 
 		if await _wait_for_login_shell(page, attempt_timeout):
 			await wait_for_site_ready(page, timeout_ms)
