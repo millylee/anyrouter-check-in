@@ -10,8 +10,8 @@ if TYPE_CHECKING:
 	from playwright.async_api import Page
 
 _MODAL_SELECTOR = 'div[role="dialog"][aria-modal="true"]'
-_CLOSE_ANNOUNCEMENT = re.compile(r'关闭公告|Close Notice', re.I)
-_DISMISS_TODAY = re.compile(r'今日关闭|Close Today', re.I)
+_CLOSE_ANNOUNCEMENT = re.compile(r'关闭公告|^关闭$|Close Notice|^Close$', re.I)
+_DISMISS_TODAY = re.compile(r'今日关闭|今日不再显示|不再显示|Close Today', re.I)
 
 _DISMISS_MODALS_CORE_JS = """
 	const isVisible = (el) => {
@@ -31,6 +31,8 @@ _DISMISS_MODALS_CORE_JS = """
 		'div.semi-modal[role="dialog"]',
 		'div.semi-modal[aria-modal="true"]',
 		'div.semi-modal-wrap',
+		'[data-slot="dialog-content"]',
+		'[role="alertdialog"]',
 	];
 
 	const closeSelectors = [
@@ -80,6 +82,9 @@ _DISMISS_MODALS_CORE_JS = """
 		'input[type="email"]',
 		'input[type="password"]',
 		'#password',
+		'input[data-slot="form-control"]',
+		'input[placeholder*="用户名"]',
+		'input[placeholder*="密码"]',
 	];
 
 	const hasLoginFields = (root) => {
@@ -206,7 +211,12 @@ async def _dismiss_popups_playwright(page: Page) -> int:
 		for index in reversed(visible_indices):
 			modal = modals.nth(index)
 			try:
-				if await modal.locator('form.semi-form, #username, input[type="password"]').count() > 0:
+				if (
+					await modal.locator(
+						'form.semi-form, #username, input[type="password"], input[data-slot="form-control"]'
+					).count()
+					> 0
+				):
 					continue
 			except Exception:  # nosec B110
 				pass

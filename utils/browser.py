@@ -35,17 +35,44 @@ LOGIN_PAGE_READY_SELECTORS = (
 	'.semi-card button:has(.semi-icon-mail)',
 	'.semi-card',
 	'button:has(.semi-icon-mail)',
+	'input[data-slot="form-control"]',
+	'input[placeholder*="用户名"]',
+	'input[placeholder*="电子邮件"]',
+	'input[placeholder*="密码"]',
+	'button[type="submit"]',
 )
 LOGIN_FORM_SELECTOR = 'form.semi-form'
-USERNAME_SELECTORS = ('#username', 'input[name="username"]', 'input[name="email"]', 'input[type="email"]')
-PASSWORD_SELECTORS = ('#password', 'input[name="password"]', 'input[type="password"]')  # nosec B105
+USERNAME_SELECTORS = (
+	'#username',
+	'input[name="username"]',
+	'input[name="email"]',
+	'input[type="email"]',
+	'input[placeholder*="用户名"]',
+	'input[placeholder*="电子邮件"]',
+	'input[placeholder*="邮箱"]',
+	'input[placeholder*="email" i]',
+	'input[placeholder*="username" i]',
+	'input[data-slot="form-control"]:not([type="password"]):not([type="hidden"]):not([type="checkbox"])',
+)
+PASSWORD_SELECTORS = (
+	'#password',
+	'input[name="password"]',
+	'input[type="password"]',
+	'input[placeholder*="密码"]',
+	'input[placeholder*="password" i]',
+)  # nosec B105
 SUBMIT_SELECTORS = (
 	f'{LOGIN_FORM_SELECTOR} button[type="submit"]',
+	'form button[type="submit"]',
 	'button[type="submit"]',
 )
 SESSION_COOKIE_NAME = 'session'
+SESSION_HINT_COOKIE_NAME = 'new_api_has_session'
 USER_SELF_API_SUFFIX = '/api/user/self'
+LOGIN_API_SUFFIX = '/api/user/login'
 CONSOLE_PATH = '/console'
+DASHBOARD_PATH = '/dashboard'
+AUTH_STORAGE_KEY = 'new-api:auth-session'
 DEFAULT_SCREENSHOT_DIR = 'checkin_screenshots'
 DEFAULT_TIMEOUT_MS = 60_000
 _pending_notify_screenshots: list[Path] = []
@@ -79,8 +106,12 @@ _SITE_READY_JS = f"""() => {{
 		const rect = wafBlockers.getBoundingClientRect?.();
 		if (rect && rect.width > 0 && rect.height > 0) return false;
 	}}
-	if (/\\/login/.test(location.pathname)) {{
-		return countVisible('.semi-card') > 0 || countVisible('#username') > 0 || countVisible('button') >= 2;
+	if (/\\/(login|sign-in|signin)/.test(location.pathname)) {{
+		return countVisible('.semi-card') > 0 || countVisible('#username') > 0
+			|| countVisible('input[data-slot="form-control"]') > 0
+			|| countVisible('input[placeholder*="用户名"]') > 0
+			|| countVisible('input[type="password"]') > 0
+			|| countVisible('button') >= 2;
 	}}
 	return countVisible('a') > 0 || countVisible('button') > 0;
 }}"""
@@ -90,7 +121,11 @@ _LOGIN_SHELL_READY_JS = f"""() => {{
 	const text = document.body?.innerText || '';
 	const blocked = /请进行验证|为了更好的访问体验|访问受限|Access denied|verify you are human/i.test(text);
 	if (blocked) return false;
-	return countVisible('.semi-card') > 0 || countVisible('#username') > 0 || countVisible('button') >= 2;
+	return countVisible('.semi-card') > 0 || countVisible('#username') > 0
+		|| countVisible('input[data-slot="form-control"]') > 0
+		|| countVisible('input[placeholder*="用户名"]') > 0
+		|| countVisible('input[type="password"]') > 0
+		|| countVisible('button') >= 2;
 }}"""
 
 _OPEN_EMAIL_FORM_JS = """() => {
@@ -106,7 +141,7 @@ _OPEN_EMAIL_FORM_JS = """() => {
 
 	const inDialog = (el) => !!el?.closest('[role="dialog"][aria-modal="true"], .semi-modal-content[role="dialog"]');
 
-	const usernameSelectors = ['#username', 'input[name="username"]', 'input[name="email"]', 'input[type="email"]'];
+	const usernameSelectors = ['#username', 'input[name="username"]', 'input[name="email"]', 'input[type="email"]', 'input[placeholder*="用户名"]', 'input[placeholder*="电子邮件"]', 'input[placeholder*="邮箱"]', 'input[data-slot="form-control"]:not([type="password"]):not([type="hidden"]):not([type="checkbox"])'];
 	const findUsername = () => {
 		for (const selector of usernameSelectors) {
 			const el = document.querySelector(selector);
@@ -139,10 +174,202 @@ _OPEN_EMAIL_FORM_JS = """() => {
 }"""
 
 
+_READ_AUTH_SESSION_JS = """() => {
+	const keys = ['new-api:auth-session', 'new-api:session', 'auth-session'];
+	for (const key of keys) {
+		try {
+			const raw = localStorage.getItem(key) || sessionStorage.getItem(key);
+			if (!raw) continue;
+			const parsed = JSON.parse(raw);
+			if (parsed && typeof parsed === 'object') return parsed;
+			if (typeof parsed === 'string' && parsed) return {access_token: parsed};
+		} catch (e) {}
+	}
+	return null;
+}"""
+
+_FETCH_USER_SELF_JS = """async () => {
+	const readToken = () => {
+		try {
+			const raw = localStorage.getItem('new-api:auth-session')
+				|| sessionStorage.getItem('new-api:auth-session');
+			if (!raw) return null;
+			const parsed = JSON.parse(raw);
+			return parsed?.access_token || parsed?.accessToken || parsed?.data?.access_token || null;
+		} catch (e) {
+			return null;
+		}
+	};
+	const token = readToken();
+	const headers = {Accept: 'application/json'};
+	if (token) headers['Authorization'] = 'Bearer ' + token;
+	const res = await fetch('/api/user/self', {headers, credentials: 'include'});
+	if (!res.ok) return null;
+	return await res.json();
+}"""
+
+_MINT_TURNSTILE_JS = """async () => {
+	const existing = document.querySelector('input[name="cf-turnstile-response"]')?.value;
+	if (existing) return existing;
+
+	const ensureTurnstile = async () => {
+		if (window.turnstile?.render) return true;
+		await new Promise((resolve, reject) => {
+			const script = document.createElement('script');
+			script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+			script.async = true;
+			script.onload = () => resolve(true);
+			script.onerror = () => reject(new Error('turnstile script'));
+			document.head.appendChild(script);
+		});
+		const deadline = Date.now() + 8000;
+		while (Date.now() < deadline) {
+			if (window.turnstile?.render) return true;
+			await new Promise((r) => setTimeout(r, 200));
+		}
+		return !!window.turnstile?.render;
+	};
+
+	const pickSiteKey = async () => {
+		const el = document.querySelector('[data-sitekey], .cf-turnstile[data-sitekey]');
+		if (el?.getAttribute('data-sitekey')) return el.getAttribute('data-sitekey');
+		try {
+			const res = await fetch('/api/status', {credentials: 'include'});
+			const payload = await res.json();
+			const data = payload?.data || payload || {};
+			return data.turnstile_site_key || data.TurnstileSiteKey || data.turnstileSiteKey || null;
+		} catch (e) {
+			return null;
+		}
+	};
+
+	const sitekey = await pickSiteKey();
+	if (!sitekey) return null;
+	try {
+		if (!await ensureTurnstile()) return null;
+	} catch (e) {
+		return null;
+	}
+
+	return await new Promise((resolve) => {
+		// 保留在视口内：Turnstile 对完全移出屏幕的宿主可能拒绝执行
+		const host = document.createElement('div');
+		host.style.position = 'fixed';
+		host.style.bottom = '0';
+		host.style.right = '0';
+		host.style.width = '300px';
+		host.style.height = '65px';
+		host.style.opacity = '0.01';
+		host.style.pointerEvents = 'none';
+		host.style.zIndex = '2147483647';
+		document.body.appendChild(host);
+
+		let done = false;
+		let widgetId = null;
+		const finish = (token) => {
+			if (done) return;
+			done = true;
+			try {
+				if (widgetId !== null) window.turnstile.remove(widgetId);
+			} catch (e) {}
+			host.remove();
+			resolve(token || null);
+		};
+		try {
+			widgetId = window.turnstile.render(host, {
+				sitekey,
+				size: 'invisible',
+				callback: (token) => finish(token),
+				'error-callback': () => finish(null),
+				'timeout-callback': () => finish(null),
+			});
+		} catch (e) {
+			finish(null);
+			return;
+		}
+		setTimeout(() => finish(null), 25000);
+	});
+}"""
+
+
 @dataclass(frozen=True)
 class BrowserLoginResult:
 	cookies: dict[str, str]
 	api_user: str | None = None
+	access_token: str | None = None
+	turnstile_token: str | None = None
+
+
+@dataclass(frozen=True)
+class VerifiedLogin:
+	profile: dict | None = None
+	access_token: str | None = None
+
+
+class AuthCapture:
+	"""拦截登录与用户信息接口，收集 access_token 和用户档案。"""
+
+	def __init__(self, page: Page) -> None:
+		self.page = page
+		self.access_token: str | None = None
+		self.user_profile: dict | None = None
+		self._bound = False
+
+	async def _on_response(self, response) -> None:
+		try:
+			url = response.url
+			status = response.status
+		except Exception:  # nosec B110
+			return
+		if status != 200:
+			return
+		if LOGIN_API_SUFFIX not in url and USER_SELF_API_SUFFIX not in url:
+			return
+		try:
+			payload = await response.json()
+		except Exception:  # nosec B110
+			return
+		if not isinstance(payload, dict):
+			return
+		token = extract_access_token(payload)
+		if token:
+			self.access_token = token
+		profile = _extract_user_profile(payload)
+		if profile:
+			self.user_profile = profile
+
+	def start(self) -> None:
+		if self._bound:
+			return
+		self.page.on('response', self._on_response)
+		self._bound = True
+
+	def stop(self) -> None:
+		if not self._bound:
+			return
+		try:
+			self.page.remove_listener('response', self._on_response)
+		except Exception:  # nosec B110
+			pass
+		self._bound = False
+
+	async def snapshot_from_page(self) -> None:
+		if not self.access_token:
+			self.access_token = await read_stored_access_token(self.page)
+		if not self.user_profile:
+			self.user_profile = await fetch_user_self_from_page(self.page)
+		if not self.user_profile:
+			stored = None
+			try:
+				stored = await self.page.evaluate(_READ_AUTH_SESSION_JS)
+			except Exception:  # nosec B110
+				stored = None
+			if isinstance(stored, dict):
+				self.user_profile = _extract_user_profile({'success': True, 'data': stored}) or _extract_user_profile(
+					stored
+				)
+				if not self.access_token:
+					self.access_token = extract_access_token(stored) or extract_access_token({'data': stored})
 
 
 @dataclass(frozen=True)
@@ -369,17 +596,71 @@ async def navigate_login_page(
 
 async def has_session_cookie(page: Page) -> bool:
 	cookies = await page.context.cookies()
-	return any(c.get('name') == SESSION_COOKIE_NAME and c.get('value') for c in cookies)
+	names = {SESSION_COOKIE_NAME, SESSION_HINT_COOKIE_NAME}
+	return any(c.get('name') in names and c.get('value') for c in cookies)
+
+
+def extract_access_token(payload: object) -> str | None:
+	"""从登录 JSON 或 localStorage 会话对象中取出 access_token。"""
+	if not isinstance(payload, dict):
+		return None
+	candidates: list[object] = [payload.get('access_token'), payload.get('accessToken')]
+	data = payload.get('data')
+	if isinstance(data, dict):
+		candidates.extend([data.get('access_token'), data.get('accessToken')])
+		user = data.get('user')
+		if isinstance(user, dict):
+			candidates.append(user.get('access_token'))
+	for token in candidates:
+		if isinstance(token, str) and token.strip():
+			return token.strip()
+	return None
 
 
 def _extract_user_profile(payload: object) -> dict | None:
 	if not isinstance(payload, dict):
 		return None
 	data = payload.get('data')
+	if isinstance(data, dict):
+		user = data.get('user')
+		if isinstance(user, dict) and user.get('id') is not None:
+			return user
+		if data.get('id') is not None:
+			return data
 	if payload.get('success') is True and isinstance(data, dict) and data.get('id'):
 		return data
-	if payload.get('id'):
+	if payload.get('id') is not None:
 		return payload
+	return None
+
+
+async def read_stored_access_token(page: Page) -> str | None:
+	try:
+		stored = await page.evaluate(_READ_AUTH_SESSION_JS)
+	except Exception:  # nosec B110
+		return None
+	if isinstance(stored, dict):
+		return extract_access_token(stored) or extract_access_token({'data': stored})
+	return None
+
+
+async def fetch_user_self_from_page(page: Page) -> dict | None:
+	try:
+		payload = await page.evaluate(_FETCH_USER_SELF_JS)
+	except Exception:  # nosec B110
+		return None
+	return _extract_user_profile(payload)
+
+
+async def mint_turnstile_token(page: Page) -> str | None:
+	"""登录会消耗一次 Turnstile token，签到前再在页面里领一枚新的。"""
+	try:
+		token = await page.evaluate(_MINT_TURNSTILE_JS)
+	except Exception as exc:  # nosec B110
+		debug_print(f'[WARN] Turnstile mint failed: {exc}')
+		return None
+	if isinstance(token, str) and token.strip():
+		return token.strip()
 	return None
 
 
@@ -393,13 +674,23 @@ async def _parse_user_self_response(response) -> dict | None:
 	return _extract_user_profile(payload)
 
 
+def _url_path(url: str) -> str:
+	"""只取 path，避免 /sign-in?redirect=/dashboard 这类查询串造成误判。"""
+	from urllib.parse import urlparse
+
+	try:
+		return (urlparse(url).path or '/').lower()
+	except Exception:  # nosec B110
+		return url.lower()
+
+
 async def is_logged_in(page: Page) -> bool:
-	"""快速判断：是否在 /console，或仍停留在登录页。"""
-	url = page.url.lower()
-	if CONSOLE_PATH in url:
-		return True
-	if '/login' in url or '/signin' in url or '/sign-in' in url:
+	"""快速判断：是否已进入控制台/仪表盘，或仍停留在登录页。"""
+	path = _url_path(page.url)
+	if '/login' in path or '/signin' in path or '/sign-in' in path:
 		return False
+	if CONSOLE_PATH in path or DASHBOARD_PATH in path or path.rstrip('/').endswith('/profile'):
+		return True
 
 	try:
 		if await page.locator('.semi-card button:has(.semi-icon-mail)').first.is_visible():
@@ -427,17 +718,28 @@ async def wait_for_logged_in(page: Page, timeout_ms: int = SESSION_WAIT_TIMEOUT_
 	return False
 
 
-async def verify_browser_login(page: Page, console_url: str, timeout_ms: int) -> dict | None:
-	"""跳转 /console 并拦截 /api/user/self，用浏览器会话确认登录用户。"""
+async def verify_browser_login(page: Page, console_url: str, timeout_ms: int) -> VerifiedLogin:
+	"""跳转控制台/仪表盘并拦截用户信息，用浏览器会话确认登录。"""
 	verify_timeout = min(timeout_ms, SESSION_WAIT_TIMEOUT_MS)
 	captured_profile: dict | None = None
+	captured_token: str | None = None
 	verified = asyncio.Event()
 
 	async def on_response(response) -> None:
-		nonlocal captured_profile
-		if captured_profile is not None:
+		nonlocal captured_profile, captured_token
+		try:
+			if response.status != 200:
+				return
+			url = response.url
+			if USER_SELF_API_SUFFIX not in url and LOGIN_API_SUFFIX not in url:
+				return
+			payload = await response.json()
+		except Exception:  # nosec B110
 			return
-		profile = await _parse_user_self_response(response)
+		token = extract_access_token(payload)
+		if token:
+			captured_token = token
+		profile = _extract_user_profile(payload)
 		if profile:
 			captured_profile = profile
 			verified.set()
@@ -456,6 +758,22 @@ async def verify_browser_login(page: Page, console_url: str, timeout_ms: int) ->
 				await asyncio.wait_for(verified.wait(), timeout=verify_timeout / 1000)
 			except TimeoutError:
 				pass
+
+		if captured_token is None:
+			captured_token = await read_stored_access_token(page)
+		if captured_profile is None:
+			captured_profile = await fetch_user_self_from_page(page)
+		if captured_profile is None:
+			try:
+				stored = await page.evaluate(_READ_AUTH_SESSION_JS)
+			except Exception:  # nosec B110
+				stored = None
+			if isinstance(stored, dict):
+				captured_profile = _extract_user_profile({'success': True, 'data': stored}) or _extract_user_profile(
+					stored
+				)
+				if captured_token is None:
+					captured_token = extract_access_token(stored) or extract_access_token({'data': stored})
 	finally:
 		page.remove_listener('response', on_response)
 
@@ -466,14 +784,19 @@ async def verify_browser_login(page: Page, console_url: str, timeout_ms: int) ->
 			print(f'[INFO] Login verified via {USER_SELF_API_SUFFIX}: id={user_id}, username={username}')
 		else:
 			print('[INFO] Login verified')
-		return captured_profile
+		return VerifiedLogin(profile=captured_profile, access_token=captured_token)
 
-	if CONSOLE_PATH in page.url.lower():
-		print(f'[WARN] Reached {CONSOLE_PATH} but {USER_SELF_API_SUFFIX} returned no user profile')
+	if captured_token:
+		print('[INFO] Login verified via access_token')
+		return VerifiedLogin(profile=None, access_token=captured_token)
+
+	url = page.url.lower()
+	if CONSOLE_PATH in url or DASHBOARD_PATH in url:
+		print(f'[WARN] Reached dashboard but {USER_SELF_API_SUFFIX} returned no user profile')
 	else:
 		debug_print(f'[WARN] Login verification failed: current URL={page.url}')
 		print('[WARN] Login verification failed')
-	return None
+	return VerifiedLogin()
 
 
 async def wait_for_waf_ready(page: Page, timeout_ms: int = WAF_READY_TIMEOUT_MS) -> None:
@@ -600,7 +923,10 @@ async def _log_login_page_state(page: Page) -> None:
 				scriptCount: document.querySelectorAll('script').length,
 				hasSemiCard: !!document.querySelector('.semi-card'),
 				mailEntryCount: document.querySelectorAll('.semi-card button:has(.semi-icon-mail)').length,
-				usernameVisible: isVisible(document.querySelector('#username')),
+				usernameVisible: isVisible(document.querySelector('#username'))
+					|| [...document.querySelectorAll('input[data-slot="form-control"], input[placeholder*="用户名"]')].some(isVisible),
+				passwordVisible: [...document.querySelectorAll('input[type="password"], input[placeholder*="密码"]')].some(isVisible),
+				turnstile: document.querySelectorAll('.cf-turnstile, iframe[src*="challenges.cloudflare.com"]').length,
 				modalVisible: [...document.querySelectorAll('div[role="dialog"][aria-modal="true"]')].some(isVisible),
 				buttons: buttons.slice(0, 8),
 			};
@@ -737,6 +1063,50 @@ async def fill_email_credentials(page: Page, email: str, password: str, timeout_
 	await _set_input_value(password_input, password, action_timeout)
 
 
+async def _accept_legal_consent(page: Page) -> None:
+	"""勾选登录页隐藏的服务条款复选框，避免提交按钮一直禁用。"""
+	selectors = (
+		'form input[type="checkbox"]',
+		'input[type="checkbox"]',
+		'button[role="checkbox"]',
+		'[data-slot="checkbox"]',
+	)
+	for selector in selectors:
+		try:
+			locators = page.locator(selector)
+			count = await locators.count()
+		except Exception:  # nosec B112
+			continue
+		for index in range(count):
+			box = locators.nth(index)
+			try:
+				checked = await box.is_checked()
+			except Exception:  # nosec B110
+				checked = False
+			if checked:
+				continue
+			try:
+				if await box.is_visible():
+					await box.click(timeout=2000)
+					continue
+			except Exception:  # nosec B110
+				pass
+			try:
+				await box.evaluate(
+					"""(el) => {
+						if (el instanceof HTMLInputElement) {
+							el.checked = true;
+							el.dispatchEvent(new Event('input', {bubbles: true}));
+							el.dispatchEvent(new Event('change', {bubbles: true}));
+						} else {
+							el.click();
+						}
+					}"""
+				)
+			except Exception:  # nosec B112
+				continue
+
+
 async def submit_login_form(page: Page, timeout_ms: int) -> None:
 	action_timeout = min(timeout_ms, FORM_ACTION_TIMEOUT_MS)
 	submit = await _first_visible_locator(page, SUBMIT_SELECTORS)
@@ -751,6 +1121,18 @@ async def submit_login_form(page: Page, timeout_ms: int) -> None:
 				continue
 	if not submit:
 		raise TimeoutError(f'Cannot find submit button: {SUBMIT_SELECTORS}')
+
+	await _accept_legal_consent(page)
+
+	wait_deadline = time.monotonic() + min(timeout_ms, 45_000) / 1000
+	while time.monotonic() < wait_deadline:
+		try:
+			if not await submit.is_disabled():
+				break
+		except Exception:  # nosec B110
+			break
+		await asyncio.sleep(0.5)
+
 	try:
 		await submit.click(timeout=action_timeout)
 	except Exception:

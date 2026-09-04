@@ -21,12 +21,14 @@ from dotenv import load_dotenv
 
 from utils.api_login import login_via_api
 from utils.browser import (
+	AuthCapture,
 	BrowserLoginResult,
 	has_session_cookie,
 	is_logged_in,
 	launch_login_context,
 	load_browser_login_settings,
 	login_with_email_form,
+	mint_turnstile_token,
 	navigate_login_page,
 	prepare_browser_page,
 	save_login_screenshot,
@@ -147,7 +149,7 @@ async def login_with_credentials(
 	email: str,
 	password: str,
 ) -> BrowserLoginResult | None:
-	"""使用邮箱密码通过浏览器登录，返回 cookies 与拦截到的 api user id。"""
+	"""使用邮箱密码通过浏览器登录，返回 cookies、api user id 以及可能的 access_token。"""
 	print(f'[PROCESSING] {account_name}: Logging in with email/password...')
 
 	login_url = f'{provider_config.domain}{provider_config.login_path}'
@@ -176,9 +178,12 @@ async def login_with_credentials(
 		return None
 
 	page = None
+	capture: AuthCapture | None = None
 	try:
 		page = await context.new_page()
 		await prepare_browser_page(page)
+		capture = AuthCapture(page)
+		capture.start()
 		await navigate_login_page(
 			page,
 			login_url,
@@ -202,9 +207,13 @@ async def login_with_credentials(
 		else:
 			print(f'[INFO] {account_name}: Browser profile already logged in')
 
-		console_url = f'{provider_config.domain}/console'
-		user_profile = await verify_browser_login(page, console_url, timeout_ms)
-		if not user_profile:
+		verify_path = getattr(provider_config, 'verify_path', None) or '/console'
+		console_url = f'{provider_config.domain}{verify_path}'
+		verified = await verify_browser_login(page, console_url, timeout_ms)
+		await capture.snapshot_from_page()
+		access_token = capture.access_token or verified.access_token
+		user_profile = capture.user_profile or verified.profile
+		if not user_profile and not access_token:
 			cookies = await context.cookies()
 			cookie_names = [c.get('name') for c in cookies if c.get('name')]
 			print(f'[FAILED] {account_name}: Login failed - /api/user/self not verified')
@@ -214,18 +223,41 @@ async def login_with_credentials(
 			await context.close()
 			return None
 
+		if getattr(provider_config, 'uses_bearer_auth', lambda: False)() and not access_token:
+			print(f'[FAILED] {account_name}: Login succeeded but dashboard access_token is missing')
+			await save_login_screenshot(page, provider_name, account_name, 'missing-access-token')
+			await context.close()
+			return None
+
+		turnstile_token = None
+		if getattr(provider_config, 'turnstile_required', False):
+			turnstile_token = await mint_turnstile_token(page)
+			if not turnstile_token:
+				print(f'[WARN] {account_name}: Failed to mint a fresh Turnstile token for check-in')
+
 		cookies = await context.cookies()
 		all_cookies = {
-			cookie.get('name'): cookie.get('value') for cookie in cookies if cookie.get('name') and cookie.get('value')
+			str(cookie['name']): str(cookie['value'])
+			for cookie in cookies
+			if cookie.get('name') and cookie.get('value')
 		}
-		api_user = str(user_profile['id']) if user_profile.get('id') is not None else None
+		api_user = None
+		if user_profile and user_profile.get('id') is not None:
+			api_user = str(user_profile['id'])
 
 		success_msg = f'[SUCCESS] {account_name}: Login successful, got {len(all_cookies)} cookies'
 		if is_debug_enabled() and api_user:
 			success_msg += f', api_user={api_user}'
+		if is_debug_enabled() and access_token:
+			success_msg += ', access_token=yes'
 		print(success_msg)
 		await context.close()
-		return BrowserLoginResult(cookies=all_cookies, api_user=api_user)
+		return BrowserLoginResult(
+			cookies=all_cookies,
+			api_user=api_user,
+			access_token=access_token,
+			turnstile_token=turnstile_token,
+		)
 
 	except Exception as e:
 		print(f'[FAILED] {account_name}: Error during login: {e}')
@@ -233,9 +265,12 @@ async def login_with_credentials(
 			await save_login_screenshot(page, provider_name, account_name, 'login-error')
 		await context.close()
 		return None
+	finally:
+		if capture is not None:
+			capture.stop()
 
 
-def get_user_info(client, headers, user_info_url: str):
+def get_user_info(client, headers, user_info_url: str, *, currency_symbol: str = '$'):
 	"""获取用户信息"""
 	try:
 		response = client.get(user_info_url, headers=headers, timeout=30)
@@ -244,13 +279,17 @@ def get_user_info(client, headers, user_info_url: str):
 			data = response.json()
 			if data.get('success'):
 				user_data = data.get('data', {})
+				if isinstance(user_data, dict) and isinstance(user_data.get('user'), dict):
+					user_data = user_data['user']
 				quota = round(user_data.get('quota', 0) / 500000, 2)
 				used_quota = round(user_data.get('used_quota', 0) / 500000, 2)
+				symbol = currency_symbol or '$'
 				return {
 					'success': True,
 					'quota': quota,
 					'used_quota': used_quota,
-					'display': f':money: Current balance: ${quota}, Used: ${used_quota}',
+					'currency_symbol': symbol,
+					'display': f':money: Current balance: {symbol}{quota}, Used: {symbol}{used_quota}',
 				}
 		return {'success': False, 'error': f'Failed to get user info: HTTP {response.status_code}'}
 	except Exception as e:
@@ -299,6 +338,16 @@ def is_already_checked_in(message: str) -> bool:
 	return any(keyword in lowered for keyword in ALREADY_CHECKED_IN_KEYWORDS)
 
 
+def flatten_check_in_status(data: dict) -> dict:
+	"""把 NewAPI 嵌套的 data.stats 摊平，兼容 sotamodel 的扁平结构。"""
+	flattened = dict(data)
+	stats = data.get('stats')
+	if isinstance(stats, dict):
+		for key, value in stats.items():
+			flattened.setdefault(key, value)
+	return flattened
+
+
 def fetch_check_in_status(client, account_name: str, provider_config, headers: dict) -> dict | None:
 	"""查询签到状态。返回 None 表示该 provider 未提供状态接口或查询失败。
 
@@ -308,8 +357,14 @@ def fetch_check_in_status(client, account_name: str, provider_config, headers: d
 	if not status_path:
 		return None
 
+	params = {'month': datetime.now().strftime('%Y-%m')}
 	try:
-		response = client.get(f'{provider_config.domain}{status_path}', headers=headers, timeout=30)
+		response = client.get(
+			f'{provider_config.domain}{status_path}',
+			headers=headers,
+			params=params,
+			timeout=30,
+		)
 		if response.status_code != 200:
 			debug_print(f'[INFO] {account_name}: Check-in status query returned HTTP {response.status_code}')
 			return None
@@ -322,10 +377,24 @@ def fetch_check_in_status(client, account_name: str, provider_config, headers: d
 	if not payload.get('success') or not isinstance(data, dict):
 		debug_print(f'[INFO] {account_name}: Check-in status unavailable: {payload.get("message")}')
 		return None
-	return data
+	return flatten_check_in_status(data)
 
 
-def execute_check_in(client, account_name: str, provider_config, headers: dict):
+def _needs_turnstile_retry(message: str) -> bool:
+	if not message:
+		return False
+	lowered = message.lower()
+	return 'turnstile' in lowered
+
+
+def execute_check_in(
+	client,
+	account_name: str,
+	provider_config,
+	headers: dict,
+	*,
+	turnstile_token: str | None = None,
+):
 	"""执行签到请求"""
 	checkin_headers = headers.copy()
 	checkin_headers.update({'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'})
@@ -333,8 +402,14 @@ def execute_check_in(client, account_name: str, provider_config, headers: dict):
 	status = fetch_check_in_status(client, account_name, provider_config, checkin_headers)
 	if status is not None:
 		reward = status.get('reward_credits')
+		if reward is None and status.get('quota_awarded') is not None:
+			try:
+				reward = round(float(status['quota_awarded']) / 500000, 2)
+			except (TypeError, ValueError):
+				reward = None
+		currency = getattr(provider_config, 'currency_symbol', None) or '$'
 		if reward is not None:
-			print(f"[INFO] {account_name}: Today's check-in reward: ${reward}")
+			print(f"[INFO] {account_name}: Today's check-in reward: {currency}{reward}")
 		if status.get('checked_in_today') is True:
 			print(f'[SUCCESS] {account_name}: Already checked in today, skipping check-in request')
 			return True
@@ -342,44 +417,70 @@ def execute_check_in(client, account_name: str, provider_config, headers: dict):
 	print(f'[NETWORK] {account_name}: Executing check-in')
 
 	sign_in_url = f'{provider_config.domain}{provider_config.sign_in_path}'
-	response = client.post(sign_in_url, headers=checkin_headers, timeout=30)
+	turnstile_required = bool(getattr(provider_config, 'turnstile_required', False))
+	request_kwargs: dict = {'headers': checkin_headers, 'timeout': 30}
+	if turnstile_required or turnstile_token:
+		request_kwargs['params'] = {'turnstile': turnstile_token or ''}
+
+	response = client.post(sign_in_url, **request_kwargs)
 
 	print(f'[RESPONSE] {account_name}: Response status code {response.status_code}')
 
-	if response.status_code == 200:
+	def _interpret(response_obj) -> tuple[bool | None, str]:
+		if response_obj.status_code != 200:
+			return False, f'HTTP {response_obj.status_code}'
 		try:
-			result = response.json()
+			result = response_obj.json()
 			if result.get('ret') == 1 or result.get('code') == 0 or result.get('success'):
-				print(f'[SUCCESS] {account_name}: Check-in successful!')
-				return True
-			else:
-				error_msg = result.get('msg', result.get('message', 'Unknown error'))
-				if is_already_checked_in(error_msg):
-					print(f'[SUCCESS] {account_name}: Already checked in today')
-					return True
-				print(f'[FAILED] {account_name}: Check-in failed - {error_msg}')
-				return False
+				return True, ''
+			error_msg = result.get('msg', result.get('message', 'Unknown error'))
+			if is_already_checked_in(error_msg):
+				return True, error_msg
+			return False, error_msg
 		except json.JSONDecodeError:
-			if 'success' in response.text.lower():
-				print(f'[SUCCESS] {account_name}: Check-in successful!')
-				return True
-			else:
-				print(f'[FAILED] {account_name}: Check-in failed - Invalid response format')
-				return False
-	else:
-		print(f'[FAILED] {account_name}: Check-in failed - HTTP {response.status_code}')
-		return False
+			if 'success' in response_obj.text.lower():
+				return True, ''
+			return False, 'Invalid response format'
+
+	ok, error_msg = _interpret(response)
+	if ok:
+		if error_msg and is_already_checked_in(error_msg):
+			print(f'[SUCCESS] {account_name}: Already checked in today')
+		else:
+			print(f'[SUCCESS] {account_name}: Check-in successful!')
+		return True
+
+	if _needs_turnstile_retry(error_msg):
+		if not turnstile_token:
+			# 浏览器没领到 token，重试同样会被拒，直接给出可操作的提示
+			print(
+				f'[FAILED] {account_name}: Check-in requires a Turnstile token but none was obtained '
+				'(check the browser login step) - '
+				f'{error_msg}'
+			)
+			return False
+		# token 是一次性的，仅在服务端校验疑似瞬时失败时重试一次
+		print(f'[WARN] {account_name}: Turnstile verification failed server-side, retrying once - {error_msg}')
+		response = client.post(sign_in_url, **request_kwargs)
+		ok, error_msg = _interpret(response)
+		if ok:
+			print(f'[SUCCESS] {account_name}: Check-in successful!')
+			return True
+
+	print(f'[FAILED] {account_name}: Check-in failed - {error_msg}')
+	return False
 
 
 def format_check_in_notification(detail: dict) -> str:
 	"""格式化签到通知消息"""
+	symbol = detail.get('currency_symbol') or '$'
 	lines = [
 		f'[CHECK-IN] {detail["name"]}',
 		'  ━━━━━━━━━━━━━━━━━━━━',
 		'  签到前',
-		f'     余额: ${detail["before_quota"]:.2f}  |  累计消耗: ${detail["before_used"]:.2f}',
+		f'     余额: {symbol}{detail["before_quota"]:.2f}  |  累计消耗: {symbol}{detail["before_used"]:.2f}',
 		'  签到后',
-		f'     余额: ${detail["after_quota"]:.2f}  |  累计消耗: ${detail["after_used"]:.2f}',
+		f'     余额: {symbol}{detail["after_quota"]:.2f}  |  累计消耗: {symbol}{detail["after_used"]:.2f}',
 	]
 
 	has_reward = detail['check_in_reward'] != 0
@@ -392,14 +493,14 @@ def format_check_in_notification(detail: dict) -> str:
 			lines.append('  今日已签到（期间有使用）')
 
 		if has_reward:
-			lines.append(f'  签到获得: +${detail["check_in_reward"]:.2f}')
+			lines.append(f'  签到获得: +{symbol}{detail["check_in_reward"]:.2f}')
 
 		if has_usage:
-			lines.append(f'  期间消耗: ${detail["usage_increase"]:.2f}')
+			lines.append(f'  期间消耗: {symbol}{detail["usage_increase"]:.2f}')
 
 		if detail['balance_change'] != 0:
 			change_symbol = '+' if detail['balance_change'] > 0 else ''
-			lines.append(f'  余额变化: {change_symbol}${detail["balance_change"]:.2f}')
+			lines.append(f'  余额变化: {change_symbol}{symbol}{detail["balance_change"]:.2f}')
 	else:
 		lines.extend(['  ━━━━━━━━━━━━━━━━━━━━', '  今日已签到，无变化'])
 
@@ -418,9 +519,10 @@ async def check_in_account(account: AccountConfig, account_index: int, app_confi
 
 	print(f'[INFO] {account_name}: Using provider "{account.provider}" ({provider_config.domain})')
 
-	# 邮箱密码优先
 	all_cookies = None
 	resolved_api_user: str | None = None
+	resolved_access_token: str | None = account.access_token
+	resolved_turnstile: str | None = None
 	auth_method = None
 	if account.has_login_credentials():
 		print(f'[INFO] {account_name}: Attempting email/password login (priority)...')
@@ -446,9 +548,16 @@ async def check_in_account(account: AccountConfig, account_index: int, app_confi
 		if login_result:
 			all_cookies = login_result.cookies
 			resolved_api_user = login_result.api_user
+			resolved_access_token = login_result.access_token or resolved_access_token
+			resolved_turnstile = login_result.turnstile_token
 		else:
 			print(f'[FAILED] {account_name}: Email/password login failed, will not use stale session cookies')
 			return False, None, None
+	elif account.access_token:
+		user_cookies = parse_cookies(account.cookies) if account.cookies else {}
+		all_cookies = user_cookies or {}
+		resolved_api_user = account.api_user
+		auth_method = 'access_token'
 	else:
 		user_cookies = parse_cookies(account.cookies)
 		if not user_cookies:
@@ -457,17 +566,19 @@ async def check_in_account(account: AccountConfig, account_index: int, app_confi
 		all_cookies = await prepare_cookies(account_name, provider_config, user_cookies)
 		auth_method = 'session cookies'
 
-	if not all_cookies:
+	if not all_cookies and not resolved_access_token:
 		return False, None, None
 
 	print(f'[AUTH] {account_name}: Using auth method -> {auth_method}')
 
 	return run_check_in_requests(
-		all_cookies,
+		all_cookies or {},
 		account,
 		account_name,
 		provider_config,
 		api_user_override=resolved_api_user,
+		access_token=resolved_access_token,
+		turnstile_token=resolved_turnstile,
 		use_proxy=provider_config.use_proxy,
 	)
 
@@ -479,6 +590,8 @@ def run_check_in_requests(
 	provider_config,
 	*,
 	api_user_override: str | None = None,
+	access_token: str | None = None,
+	turnstile_token: str | None = None,
 	use_proxy: bool = False,
 ) -> tuple[bool, dict | None, dict | None]:
 	"""执行 HTTP 签到请求（同步，避免在 async 上下文中使用阻塞 httpx）。"""
@@ -495,7 +608,8 @@ def run_check_in_requests(
 			print(f'[WARN] {account_name}: Provider requires proxy but CHECKIN_PROXY_URL is not set')
 
 		with httpx.Client(**client_kwargs) as client:
-			client.cookies.update(all_cookies)
+			if all_cookies:
+				client.cookies.update(all_cookies)
 
 			headers = {
 				'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
@@ -513,20 +627,30 @@ def run_check_in_requests(
 			api_user = api_user_override or account.api_user
 			if api_user:
 				headers[provider_config.api_user_key] = api_user
+			token = access_token or account.access_token
+			if token:
+				headers['Authorization'] = f'Bearer {token}'
 
 			user_info_url = f'{provider_config.domain}{provider_config.user_info_path}'
-			user_info_before = get_user_info(client, headers, user_info_url)
+			currency = getattr(provider_config, 'currency_symbol', None) or '$'
+			user_info_before = get_user_info(client, headers, user_info_url, currency_symbol=currency)
 			if user_info_before and user_info_before.get('success'):
 				print(user_info_before['display'])
 			elif user_info_before:
 				print(user_info_before.get('error', 'Unknown error'))
 
 			if provider_config.needs_manual_check_in():
-				success = execute_check_in(client, account_name, provider_config, headers)
-				user_info_after = get_user_info(client, headers, user_info_url)
+				success = execute_check_in(
+					client,
+					account_name,
+					provider_config,
+					headers,
+					turnstile_token=turnstile_token,
+				)
+				user_info_after = get_user_info(client, headers, user_info_url, currency_symbol=currency)
 				return success, user_info_before, user_info_after
 
-			user_info_after = get_user_info(client, headers, user_info_url)
+			user_info_after = get_user_info(client, headers, user_info_url, currency_symbol=currency)
 			if user_info_after and user_info_after.get('success'):
 				print(f'[INFO] {account_name}: Check-in completed automatically (triggered by user info request)')
 				return True, user_info_before, user_info_after
@@ -622,6 +746,7 @@ async def main():
 						'usage_increase': usage_increase,
 						'balance_change': balance_change,
 						'success': success,
+						'currency_symbol': user_info_after.get('currency_symbol', '$'),
 					}
 
 			if should_notify_this_account:

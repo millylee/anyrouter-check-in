@@ -40,7 +40,8 @@ def test_sotamodel_needs_no_browser_or_waf(sotamodel):
 	assert sotamodel.needs_waf_cookies() is False
 	assert sotamodel.needs_manual_check_in() is True
 	assert sotamodel.persist_profile is False
-	assert sotamodel.use_proxy is False
+	# 内置 provider 统一默认走代理，未设置 CHECKIN_PROXY_URL 时只告警不失败
+	assert sotamodel.use_proxy is True
 
 
 def test_sotamodel_fields_can_be_overridden(monkeypatch):

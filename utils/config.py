@@ -26,6 +26,13 @@ class ProviderConfig:
 	login_method: Literal['browser', 'api'] = 'browser'
 	login_api_path: str = '/api/user/login'
 	check_in_status_path: str | None = None
+	# cookie: 旧版 NewAPI，靠 session cookie + new-api-user
+	# bearer: 新版仪表盘只认 Authorization: Bearer <access_token>
+	auth_style: Literal['cookie', 'bearer'] = 'cookie'
+	verify_path: str = '/console'
+	currency_symbol: str = '$'
+	# True 时签到 POST 走 TurnstileCheck 中间件，必须带 ?turnstile=
+	turnstile_required: bool = False
 
 	def __post_init__(self):
 		required_waf_cookies = set()
@@ -53,6 +60,7 @@ class ProviderConfig:
 		"""
 		default_use_proxy = defaults.use_proxy if defaults else False
 		default_persist_profile = defaults.persist_profile if defaults else False
+		default_turnstile_required = defaults.turnstile_required if defaults else False
 		return cls(
 			name=name,
 			domain=data['domain'],
@@ -67,6 +75,10 @@ class ProviderConfig:
 			login_method=data.get('login_method', defaults.login_method if defaults else 'browser'),
 			login_api_path=data.get('login_api_path', defaults.login_api_path if defaults else '/api/user/login'),
 			check_in_status_path=data.get('check_in_status_path', defaults.check_in_status_path if defaults else None),
+			auth_style=data.get('auth_style', defaults.auth_style if defaults else 'cookie'),
+			verify_path=data.get('verify_path', defaults.verify_path if defaults else '/console'),
+			currency_symbol=data.get('currency_symbol', defaults.currency_symbol if defaults else '$'),
+			turnstile_required=data.get('turnstile_required', default_turnstile_required),
 		)
 
 	def needs_waf_cookies(self) -> bool:
@@ -80,6 +92,44 @@ class ProviderConfig:
 	def uses_api_login(self) -> bool:
 		"""判断邮箱密码登录是否直接调用 JSON 接口（无需启动浏览器）"""
 		return self.login_method == 'api'
+
+	def uses_bearer_auth(self) -> bool:
+		"""判断仪表盘接口是否只认 Authorization: Bearer（新版 NewAPI）"""
+		return self.auth_style == 'bearer'
+
+
+def _newapi_checkin_provider(
+	name: str,
+	domain: str,
+	*,
+	login_method: Literal['browser', 'api'],
+	auth_style: Literal['cookie', 'bearer'],
+	turnstile_required: bool,
+	login_path: str,
+	verify_path: str,
+	currency_symbol: str = '$',
+	use_proxy: bool = True,
+) -> ProviderConfig:
+	"""NewAPI 内置签到站点的公共默认值。"""
+	return ProviderConfig(
+		name=name,
+		domain=domain,
+		login_path=login_path,
+		sign_in_path='/api/user/checkin',
+		user_info_path='/api/user/self',
+		api_user_key='new-api-user',
+		bypass_method=None,
+		waf_cookie_names=None,
+		use_proxy=use_proxy,
+		persist_profile=False,
+		login_method=login_method,
+		login_api_path='/api/user/login',
+		check_in_status_path='/api/user/checkin',
+		auth_style=auth_style,
+		verify_path=verify_path,
+		currency_symbol=currency_symbol,
+		turnstile_required=turnstile_required,
+	)
 
 
 @dataclass
@@ -101,7 +151,7 @@ class AppConfig:
 				api_user_key='new-api-user',
 				bypass_method='waf_cookies',
 				waf_cookie_names=['acw_tc', 'cdn_sec_tc', 'acw_sc__v2'],
-				use_proxy=False,
+				use_proxy=True,
 				persist_profile=True,
 			),
 			'agentrouter': ProviderConfig(
@@ -126,13 +176,72 @@ class AppConfig:
 				api_user_key='new-api-user',
 				bypass_method=None,  # 站点为纯 nginx，无 WAF 验证
 				waf_cookie_names=None,
-				use_proxy=False,
+				use_proxy=True,
 				persist_profile=False,
 				# 前端是 React + Tailwind，与 Semi Design 选择器不兼容，直接走 JSON 登录接口
 				login_method='api',
 				login_api_path='/api/user/login',
 				# 同一路径 GET 返回 checked_in_today，比匹配多语言提示更可靠
 				check_in_status_path='/api/user/sota-agent-checkin',
+			),
+			# 经典 Semi 前端 + 未开启 Turnstile，JSON 登录即可
+			'helpcoder': _newapi_checkin_provider(
+				'helpcoder',
+				'https://helpcoder.cc',
+				login_method='api',
+				auth_style='cookie',
+				turnstile_required=False,
+				login_path='/login',
+				verify_path='/console',
+			),
+			# 新仪表盘 + Turnstile，浏览器登录后用 Bearer access_token
+			'seekai': _newapi_checkin_provider(
+				'seekai',
+				'https://seekai.cc',
+				login_method='browser',
+				auth_style='bearer',
+				turnstile_required=True,
+				login_path='/sign-in',
+				verify_path='/dashboard',
+			),
+			'gorouter': _newapi_checkin_provider(
+				'gorouter',
+				'https://gorouter.app',
+				login_method='browser',
+				auth_style='bearer',
+				turnstile_required=True,
+				login_path='/sign-in',
+				verify_path='/dashboard',
+			),
+			'justwoker': _newapi_checkin_provider(
+				'justwoker',
+				'https://api.justwoker.icu',
+				login_method='browser',
+				auth_style='bearer',
+				turnstile_required=True,
+				login_path='/sign-in',
+				verify_path='/dashboard',
+			),
+			# 与 seekai 同一套前端；Cloudflare WAF 较严，非浏览器 UA 会被 403
+			'tabitoken': _newapi_checkin_provider(
+				'tabitoken',
+				'https://tabitoken.com',
+				login_method='browser',
+				auth_style='bearer',
+				turnstile_required=True,
+				login_path='/sign-in',
+				verify_path='/dashboard',
+			),
+			# 新仪表盘但未开启 Turnstile；额度显示为 CNY
+			'hcnsec': _newapi_checkin_provider(
+				'hcnsec',
+				'https://api.hcnsec.cn',
+				login_method='api',
+				auth_style='bearer',
+				turnstile_required=False,
+				login_path='/sign-in',
+				verify_path='/dashboard',
+				currency_symbol='¥',
 			),
 		}
 
@@ -183,6 +292,7 @@ class AccountConfig:
 	name: str | None = None
 	email: str | None = None
 	password: str | None = None
+	access_token: str | None = None
 
 	@classmethod
 	def from_dict(cls, data: dict, index: int) -> 'AccountConfig':
@@ -197,6 +307,7 @@ class AccountConfig:
 			name=name if name else None,
 			email=data.get('email'),
 			password=data.get('password'),
+			access_token=data.get('access_token'),
 		)
 
 	def has_login_credentials(self) -> bool:
@@ -235,17 +346,20 @@ def load_accounts_config() -> list[AccountConfig] | None:
 
 			if 'api_user' not in account_dict:
 				has_login = account_dict.get('email') and account_dict.get('password')
-				if not has_login:
+				has_access_token = bool(account_dict.get('access_token'))
+				if not has_login and not has_access_token:
 					print(
-						f'ERROR: Account {i + 1} missing required field (api_user) - only email+password login can omit it'
+						f'ERROR: Account {i + 1} missing required field (api_user) - '
+						'only email+password or access_token login can omit it'
 					)
 					return None
 
 			has_cookies = 'cookies' in account_dict and account_dict['cookies']
 			has_login = account_dict.get('email') and account_dict.get('password')
+			has_access_token = bool(account_dict.get('access_token'))
 
-			if not has_cookies and not has_login:
-				print(f'ERROR: Account {i + 1} must have either cookies or email+password')
+			if not has_cookies and not has_login and not has_access_token:
+				print(f'ERROR: Account {i + 1} must have cookies, email+password, or access_token')
 				return None
 
 			if 'name' in account_dict and not account_dict['name']:

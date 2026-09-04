@@ -7,7 +7,7 @@
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![License](https://img.shields.io/github/license/millylee/anyrouter-check-in)](LICENSE)
 
-多平台多账号自动签到，理论上支持所有 NewAPI、OneAPI 平台，目前内置支持 Any Router、Agent Router 与 SOTA Model，其它可根据文档进行摸索配置。
+多平台多账号自动签到，理论上支持所有 NewAPI、OneAPI 平台，目前内置支持 Any Router、Agent Router、SOTA Model、HelpCoder、SeekAI、GoRouter、JustWoker、HCNSec 与 TaBiAI，其它可根据文档进行摸索配置。
 
 推荐搭配使用[Auo](https://github.com/millylee/auo)，支持任意 Claude Code Token 切换的工具。
 
@@ -80,9 +80,10 @@
 
 **字段说明**：
 
-- `email` + `password`：推荐的浏览器登录方式，登录成功后会自动获取 cookies 与用户标识
+- `email` + `password`：推荐的登录方式，登录成功后会自动获取 cookies、用户标识与 access_token
 - `cookies`：兼容旧版的 session cookies 登录方式
 - `api_user`：session cookies 登录时用于请求头的 new-api-user 参数；邮箱密码登录可省略
+- `access_token`：新版 NewAPI 仪表盘的 Bearer token，适用于 `seekai`、`gorouter`、`justwoker`、`hcnsec`、`tabitoken`。填了它可以不填 `api_user` 与 `cookies`
 - `provider` (可选)：指定使用的服务商，默认为 `anyrouter`
 - `name` (可选)：自定义账号显示名称，用于通知和日志中标识账号
 
@@ -90,7 +91,7 @@
 
 - 如果未提供 `provider` 字段，默认使用 `anyrouter`（向后兼容）
 - 如果未提供 `name` 字段，会使用 `Account 1`、`Account 2` 等默认名称
-- `anyrouter`、`agentrouter` 与 `sotamodel` 配置已内置，无需填写
+- `anyrouter`、`agentrouter`、`sotamodel`、`helpcoder`、`seekai`、`gorouter`、`justwoker`、`hcnsec`、`tabitoken` 配置已内置，无需填写
 
 如果使用 session cookies 登录，接下来获取 cookies 与 api_user 的值。
 
@@ -213,9 +214,51 @@
 
 > 注意：开启了两步验证（2FA）的账号无法自动登录，脚本会明确报错提示。
 
+### HelpCoder / SeekAI / GoRouter / JustWoker / HCNSec / TaBiAI 配置
+
+这六个站点都是 NewAPI，签到接口统一为 `/api/user/checkin`（GET 查状态、POST 领额度），每天一次。只填邮箱密码即可，`api_user` 和 `access_token` 都会在登录后自动获取：
+
+```json
+[
+  { "name": "HelpCoder", "provider": "helpcoder", "email": "your@email.com", "password": "your_password" },
+  { "name": "SeekAI", "provider": "seekai", "email": "your@email.com", "password": "your_password" },
+  { "name": "GoRouter", "provider": "gorouter", "email": "your@email.com", "password": "your_password" },
+  { "name": "JustWoker", "provider": "justwoker", "email": "your@email.com", "password": "your_password" },
+  { "name": "HCNSec", "provider": "hcnsec", "email": "your@email.com", "password": "your_password" },
+  { "name": "TaBiAI", "provider": "tabitoken", "email": "your@email.com", "password": "your_password" }
+]
+```
+
+六个站点的差异如下：
+
+| provider | 域名 | 登录方式 | 鉴权 | 登录页 Turnstile | 额度单位 |
+| --- | --- | --- | --- | --- | --- |
+| `helpcoder` | https://helpcoder.cc | JSON 接口 | session cookie | 无 | $ |
+| `seekai` | https://seekai.cc | 浏览器 | Bearer token | 有 | $ |
+| `gorouter` | https://gorouter.app | 浏览器 | Bearer token | 有 | $ |
+| `justwoker` | https://api.justwoker.icu | 浏览器 | Bearer token | 有 | $ |
+| `hcnsec` | https://api.hcnsec.cn | JSON 接口 | Bearer token | 无 | ¥ |
+| `tabitoken` | https://tabitoken.com | 浏览器 | Bearer token | 有 | $ |
+
+说明：
+
+- **`helpcoder` 和 `hcnsec` 不启动浏览器**，直接 POST `/api/user/login`，更快也更稳定
+- **`seekai`、`gorouter`、`justwoker`、`tabitoken` 的登录页有 Cloudflare Turnstile**，必须用 CloakBrowser 过人机校验。登录会消耗一枚 token，脚本随后在同一页面再领一枚用于签到 POST
+- 新版仪表盘（`seekai`/`gorouter`/`justwoker`/`hcnsec`/`tabitoken`）的后端只认 `Authorization: Bearer <access_token>`，光有 session cookie 会返回未授权，所以这几个站点必须拿到 access_token 才算登录成功
+- `tabitoken` 的 Cloudflare WAF 比其它站更严，非浏览器 UA 直接 403。脚本请求都带浏览器 UA，且浏览器登录拿到的 `cf_clearance` 会一并带给后续请求
+- 脚本会先 GET `/api/user/checkin?month=YYYY-MM` 读 `stats.checked_in_today`，已签到就跳过 POST，不会重复请求
+
+如果你已经从浏览器里拿到了 access_token，也可以跳过密码登录（F12 → Application → Local Storage → `new-api:auth-session` 里的 `access_token`）：
+
+```json
+[{ "provider": "hcnsec", "access_token": "你的 access_token" }]
+```
+
+> access_token 有效期比 session 更短，过期后签到会报未授权，建议优先用邮箱密码。
+
 ## 自定义 Provider 配置（可选）
 
-默认情况下，`anyrouter`、`agentrouter`、`sotamodel` 已内置配置，无需额外设置。如果你需要使用其他服务商，可以通过环境变量 `PROVIDERS` 配置：
+默认情况下，`anyrouter`、`agentrouter`、`sotamodel`、`helpcoder`、`seekai`、`gorouter`、`justwoker`、`hcnsec`、`tabitoken` 已内置配置，无需额外设置。如果你需要使用其他服务商，可以通过环境变量 `PROVIDERS` 配置：
 
 ### 基础配置（仅域名）
 
@@ -252,7 +295,7 @@
 - 不设置或设置为 `null`：直接使用用户提供的 cookies 进行请求（适合无 WAF 保护的网站）
 - 设置为 `"waf_cookies"`：使用 CloakBrowser 打开浏览器获取 WAF cookies 后再进行请求（适合有 WAF 保护的网站）
 
-> 注：`anyrouter`、`agentrouter` 和 `sotamodel` 已内置默认配置，无需在 `PROVIDERS` 中配置
+> 注：`anyrouter`、`agentrouter`、`sotamodel`、`helpcoder`、`seekai`、`gorouter`、`justwoker`、`hcnsec`、`tabitoken` 已内置默认配置，无需在 `PROVIDERS` 中配置
 
 ### 在 GitHub Actions 中配置
 
@@ -276,7 +319,13 @@
   - `"browser"`：用 CloakBrowser 打开登录页填表单（适合有 WAF 或人机校验的站点）
   - `"api"`：直接 POST 登录接口，不启动浏览器（适合无 WAF、无 Turnstile 的站点，更快更稳定）
 - `login_api_path` (可选)：JSON 登录接口路径，默认为 `/api/user/login`，仅 `login_method` 为 `"api"` 时使用
-- `check_in_status_path` (可选)：签到状态查询接口路径。设置后会先 GET 该接口，若返回 `checked_in_today: true` 就跳过签到请求。比匹配服务端多语言提示更可靠
+- `check_in_status_path` (可选)：签到状态查询接口路径。设置后会先 GET 该接口，若返回 `checked_in_today: true` 就跳过签到请求。比匹配服务端多语言提示更可靠。也支持 NewAPI 把该字段嵌在 `data.stats` 里的写法
+- `auth_style` (可选)：仪表盘接口的鉴权方式，默认为 `"cookie"`
+  - `"cookie"`：旧版 NewAPI，用 session cookie + `new-api-user` 请求头
+  - `"bearer"`：新版 NewAPI 仪表盘，只认 `Authorization: Bearer <access_token>`；登录若拿不到 access_token 会直接判定失败
+- `verify_path` (可选)：登录后用于验证会话的页面路径，默认为 `/console`；新版仪表盘一般是 `/dashboard`
+- `turnstile_required` (可选)：签到 POST 是否需要带 `?turnstile=<token>`，默认为 `false`。开启后脚本会在浏览器里再领一枚 token，被服务端拒绝时自动重试一次
+- `currency_symbol` (可选)：额度显示的货币符号，默认为 `$`（例如 HCNSec 用 `¥`）
 
 **配置示例**（完整）：
 
@@ -293,7 +342,7 @@
 }
 ```
 
-**内置配置说明**：
+**内置配置说明**（全部内置 provider 均为 `use_proxy: true`，详见[代理配置](#代理配置可选)）：
 
 - `anyrouter`：
   - `bypass_method: "waf_cookies"`（需要先获取 WAF cookies，然后执行签到）
@@ -301,23 +350,33 @@
 - `agentrouter`：
   - `bypass_method: "waf_cookies"`（需要获取 `acw_tc`）
   - `sign_in_path: null`（查询用户信息时自动签到）
-  - `use_proxy: true`
 - `sotamodel`：
   - `login_method: "api"`（直接调用 JSON 登录接口，不启动浏览器）
   - `login_path: "/sign-in"`
   - `sign_in_path: "/api/user/sota-agent-checkin"`（`/agents` 页面底部的 Daily Check-in）
   - `check_in_status_path: "/api/user/sota-agent-checkin"`（GET 查询 `checked_in_today`）
   - `bypass_method: null`（无 WAF）
-  - `use_proxy: false`
+- `helpcoder`：
+  - `login_method: "api"`，`auth_style: "cookie"`，`turnstile_required: false`
+  - `login_path: "/login"`，`verify_path: "/console"`
+  - `sign_in_path` / `check_in_status_path: "/api/user/checkin"`
+- `seekai` / `gorouter` / `justwoker` / `tabitoken`：
+  - `login_method: "browser"`（登录页有 Turnstile），`auth_style: "bearer"`，`turnstile_required: true`
+  - `login_path: "/sign-in"`，`verify_path: "/dashboard"`
+  - `sign_in_path` / `check_in_status_path: "/api/user/checkin"`
+- `hcnsec`：
+  - `login_method: "api"`，`auth_style: "bearer"`，`turnstile_required: false`
+  - `login_path: "/sign-in"`，`verify_path: "/dashboard"`，`currency_symbol: "¥"`
+  - `sign_in_path` / `check_in_status_path: "/api/user/checkin"`
 
 **重要提示**：
 
-- `PROVIDERS` 是可选的，不配置则使用内置的 `anyrouter`、`agentrouter` 和 `sotamodel`
+- `PROVIDERS` 是可选的，不配置则使用上面全部内置 provider
 - 自定义的 provider 配置会覆盖同名的默认配置
 
 ## 代理配置（可选）
 
-内置的 `agentrouter` 默认 `use_proxy: true`。如果你的运行环境访问该平台不稳定，可以在 GitHub Actions 中配置 mihomo 订阅代理。
+**全部内置 provider 默认 `use_proxy: true`**，只要设置了代理地址就会走代理。没设置代理地址时只打印一条 `[WARN]`，签到照常直连执行，所以不配代理也能用。
 
 在仓库 Settings -> Environments -> production -> Environment secrets 中添加：
 
@@ -327,8 +386,15 @@
 
 ```bash
 CHECKIN_PROXY_URL=http://127.0.0.1:7890
-PROVIDERS={"agentrouter":{"use_proxy":true}}
 ```
+
+如果某个站点直连更快、不想让它走代理，可以在 `PROVIDERS` 里单独关掉（`domain` 必填）：
+
+```bash
+PROVIDERS={"anyrouter":{"domain":"https://anyrouter.top","use_proxy":false}}
+```
+
+自定义 provider（不在内置列表里的）仍然默认 `use_proxy: false`，需要走代理就显式写 `"use_proxy": true`。
 
 如果使用订阅脚本，默认会用 `https://www.google.com/generate_204` 测试代理连通性；也可以通过 `PROXY_TEST_URL` 覆盖。
 
