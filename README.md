@@ -381,9 +381,21 @@ SuperAPI（`https://superapi.buzz`）是新版 NewAPI，签到接口为 `POST /a
 [{ "name": "SuperAPI-thy1117", "provider": "superapi", "access_token": "xxx", "api_user": "8831" }]
 ```
 
+### Gemai（哈基米 API 站）
+
+Gemai（<https://api.gemai.cc/profile>）使用 NewAPI，签到接口为 `POST /api/user/checkin`。站点关闭了 Turnstile，使用**系统访问令牌（access_token）**加**用户 ID（api_user）**即可，无需浏览器验证。
+
+将账号 JSON 保存到 production Environment Secret `EXTRA_ACCOUNTS_34`；该槽位会追加账号，不会覆盖已有账号：
+
+```json
+[{ "name": "Gemai-account-1", "provider": "gemai", "access_token": "替换成系统访问令牌", "api_user": "替换成用户 ID" }]
+```
+
+令牌仅存入 GitHub Secret，不要写进仓库。账号沿用现有每天四次的定时任务，重复签到按成功处理。
+
 ## 自定义 Provider 配置（可选）
 
-默认情况下，`anyrouter`、`agentrouter`、`futureppo`、`twinkle`、`42w`、`kapibala`、`nianhua`、`sheapi`、`aiaiai`、`guyscode`、`xiaobai`、`xiaojimao`、`gorouter`、`qingjiu`、`justwoker`、`tabitoken`、`windhub`、`laomo`、`nhh123`、`superapi` 已内置配置，无需额外设置。如果你需要使用其他服务商，可以通过环境变量 `PROVIDERS` 配置：
+默认情况下，`anyrouter`、`agentrouter`、`futureppo`、`twinkle`、`42w`、`kapibala`、`nianhua`、`sheapi`、`aiaiai`、`guyscode`、`xiaobai`、`xiaojimao`、`gorouter`、`qingjiu`、`justwoker`、`tabitoken`、`windhub`、`laomo`、`nhh123`、`superapi`、`gemai` 已内置配置，无需额外设置。如果你需要使用其他服务商，可以通过环境变量 `PROVIDERS` 配置：
 
 ### 基础配置（仅域名）
 

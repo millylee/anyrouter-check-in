@@ -25,3 +25,9 @@ def test_removed_account_secrets_are_not_wired_into_workflow():
 	for removed_slot in (2, 27, 28, 29, 30, 31, 32):
 		# 用完整赋值行比对，否则 EXTRA_ACCOUNTS_2 会被 EXTRA_ACCOUNTS_20 之类的前缀误判。
 		assert f'EXTRA_ACCOUNTS_{removed_slot}: ' not in text
+
+
+def test_gemai_secret_is_wired_into_workflow():
+	text = WORKFLOW.read_text(encoding='utf-8')
+
+	assert 'EXTRA_ACCOUNTS_34: ${{ secrets.EXTRA_ACCOUNTS_34 }}' in text

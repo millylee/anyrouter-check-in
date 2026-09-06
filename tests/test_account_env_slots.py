@@ -15,6 +15,7 @@ def _clear(monkeypatch):
 		'EXTRA_ACCOUNTS_15',
 		'EXTRA_ACCOUNTS_17',
 		'EXTRA_ACCOUNTS_18',
+		'EXTRA_ACCOUNTS_34',
 	):
 		monkeypatch.delenv(name, raising=False)
 
@@ -103,3 +104,22 @@ def test_tabitoken_slot_is_loaded_last(monkeypatch):
 		'EXTRA_ACCOUNTS_17',
 		'EXTRA_ACCOUNTS_18',
 	]
+
+
+def test_gemai_slot_appends_pat_account_without_clobbering(monkeypatch):
+	_clear(monkeypatch)
+	monkeypatch.setenv('ANYROUTER_ACCOUNTS', BASE)
+	monkeypatch.setenv(
+		'EXTRA_ACCOUNTS_34',
+		json.dumps([{'name': 'Gemai', 'provider': 'gemai', 'access_token': 'test-token', 'api_user': '12345'}]),
+	)
+
+	accounts = load_accounts_config()
+
+	assert _account_env_names()[-1] == 'EXTRA_ACCOUNTS_34'
+	assert [account.name for account in accounts] == ['Main', 'Gemai']
+	assert accounts[0].cookies == {'session': 'a'}
+	assert accounts[1].provider == 'gemai'
+	assert accounts[1].api_user == '12345'
+	assert accounts[1].access_token == 'test-token'
+	assert accounts[1].cookies is None
