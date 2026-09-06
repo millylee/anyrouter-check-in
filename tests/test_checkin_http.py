@@ -189,3 +189,12 @@ def test_execute_captcha_check_in_result_keeps_provider_error(monkeypatch):
 		False,
 		'Check-in failed - 该 IP 签到账号数量过多，请稍后再试',
 	)
+
+
+def test_get_user_info_includes_gift_quota_in_balance():
+	client = FakeClient([FakeResponse(200, {'success': True, 'data': {'quota': 70464, 'gift_quota': 121430385}})])
+
+	result = get_user_info(client, {'Cookie': 'session=valid'}, 'https://api.gemai.cc/api/user/self')
+
+	assert result['quota'] == 243.0
+	assert result['display'] == ':money: Current balance: $243.0, Used: $0.0'

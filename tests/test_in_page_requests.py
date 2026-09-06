@@ -83,3 +83,29 @@ def test_parse_user_info_non_200():
 
 def test_parse_user_info_invalid_json():
 	assert parse_user_info_response(200, 'not json')['success'] is False
+
+
+def test_parse_user_info_includes_gift_quota_in_balance():
+	# Gemai / 哈基米这类分支把充值额度放 quota、赠送额度放 gift_quota，
+	# 站点钱包展示的是两者之和；只读 quota 会把余额严重低报。
+	body = json.dumps(
+		{
+			'success': True,
+			'data': {'quota': 70464, 'gift_quota': 121430385, 'total_quota': 121500849, 'used_quota': 197500000},
+		}
+	)
+
+	info = parse_user_info_response(200, body)
+
+	assert info['success'] is True
+	assert info['quota'] == 243.0
+	assert info['used_quota'] == 395.0
+
+
+def test_parse_user_info_without_gift_quota_is_unchanged():
+	body = json.dumps({'success': True, 'data': {'quota': 500000, 'used_quota': 250000}})
+
+	info = parse_user_info_response(200, body)
+
+	assert info['quota'] == 1.0
+	assert info['used_quota'] == 0.5

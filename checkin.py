@@ -386,6 +386,27 @@ def refresh_access_token(
 	return None
 
 
+NEWAPI_QUOTA_PER_UNIT = 500000
+
+
+def newapi_quota_pair(info: dict) -> tuple[float, float]:
+	"""把 NewAPI 的原始额度换算成展示单位，返回 (余额, 已用)。
+
+	部分 NewAPI 分支（如 Gemai / 哈基米）把充值额度放 ``quota``、赠送额度放
+	``gift_quota``，站点钱包展示的是两者之和（即 ``total_quota``）。只读
+	``quota`` 会把 243 元的余额报成 0.14 元；更糟的是签到奖励若落在赠送额度
+	里，前后差值恒为 0，通知会被误判成「签到无变化」。没有 ``gift_quota``
+	的站点该字段缺省为 0，行为与原来一致。
+	"""
+	quota = _number(info.get('quota'))
+	gift_quota = _number(info.get('gift_quota'))
+	used_quota = _number(info.get('used_quota'))
+	return (
+		round((quota + gift_quota) / NEWAPI_QUOTA_PER_UNIT, 2),
+		round(used_quota / NEWAPI_QUOTA_PER_UNIT, 2),
+	)
+
+
 def get_user_info(client, headers, user_info_url: str, *, api_user_key: str | None = None):
 	"""获取用户信息。
 
@@ -409,8 +430,7 @@ def get_user_info(client, headers, user_info_url: str, *, api_user_key: str | No
 				data = response.json()
 				if data.get('success'):
 					user_data = data.get('data', {})
-					quota = round(user_data.get('quota', 0) / 500000, 2)
-					used_quota = round(user_data.get('used_quota', 0) / 500000, 2)
+					quota, used_quota = newapi_quota_pair(user_data)
 					return {
 						'success': True,
 						'quota': quota,
@@ -607,8 +627,7 @@ def parse_user_info_response(status_code: int, body: str) -> dict:
 		return {'success': False, 'error': f'Failed to get user info: {data.get("message", "unknown")}'}
 
 	info = data.get('data') or {}
-	quota = round(info.get('quota', 0) / 500000, 2)
-	used_quota = round(info.get('used_quota', 0) / 500000, 2)
+	quota, used_quota = newapi_quota_pair(info)
 	return {
 		'success': True,
 		'quota': quota,
@@ -690,7 +709,7 @@ def parse_gorouter_checkin_result(status_code: int, body: str) -> tuple[bool, bo
 		data = payload.get('data')
 		awarded = data.get('quota_awarded') if isinstance(data, dict) else None
 		if isinstance(awarded, (int, float)):
-			print(f'[REWARD] Check-in awarded ${round(float(awarded) / 500000, 2)}')
+			print(f'[REWARD] Check-in awarded ${round(float(awarded) / NEWAPI_QUOTA_PER_UNIT, 2)}')
 		return True, False, None
 
 	# 与前端 shouldTriggerTurnstile 一致：只有 Turnstile 相关失败才值得换 token 重试。
