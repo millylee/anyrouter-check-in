@@ -15,12 +15,29 @@
 
 用于 Claude Code 中转站 Any Router 网站多账号每日签到，一次 $25，限时注册即送 100 美金，[点击这里注册](https://anyrouter.top/register?aff=gSsN)。业界良心，支持 Claude Sonnet 4.5、GPT-5-Codex、Claude Code 百万上下文（使用 `/model sonnet[1m]` 开启），`gemini-2.5-pro` 模型。
 
+## GitHub OAuth 扩展说明
+
+当前代码基于 [millylee/anyrouter-check-in](https://github.com/millylee/anyrouter-check-in)，保留了上游的多 Provider、Cookie/邮箱密码登录、CloakBrowser WAF 绕过、通知与测试体系。
+
+在此基础上，额外加入了 AnyRouter GitHub OAuth/TOTP 签到路径：
+
+- 新增 `checkin_github_oauth.py`，使用 Python + Playwright Chromium 完成 GitHub OAuth 登录与 AnyRouter 签到。
+- 新增 `AnyRouter GitHub OAuth 自动签到` GitHub Actions workflow，读取 `ANYROUTER_GITHUB_ACCOUNTS` secret，支持 TOTP、登录态缓存、手动指定账号运行。
+- GitHub OAuth/TOTP 流程参考了 [liukaizheng/anyrouter-check-in](https://github.com/liukaizheng/anyrouter-check-in)，尤其是其 README 中的 [GitHub OAuth Session Acquisition 流程示意](https://github.com/liukaizheng/anyrouter-check-in#github-oauth-session-acquisition-detailed) 与 TOTP 处理说明。
+- 与参考项目的实现差异：参考项目使用 Rust/chromiumoxide；这里使用 Python/Playwright，并适配本仓库已有的依赖、通知和 GitHub Actions 结构。
+- 与上游项目的主要差异：新增 GitHub OAuth/TOTP 路线；原有 Cookie/邮箱密码路线仍保留。
+
+如果只需要 GitHub OAuth/TOTP 专用签到器，也可以直接参考上面的 Rust 实现；如果需要兼容上游已有的多 Provider 和通知能力，可以使用这里的 Python/Playwright 扩展路径。
+
+为避免影响上游默认定时任务，新增的 GitHub OAuth workflow 默认只支持 `workflow_dispatch` 手动触发，不会替代或干扰原有 `AnyRouter 自动签到` workflow。确认 `ANYROUTER_GITHUB_ACCOUNTS` 配置可用后，如需定时执行，可以自行给该 workflow 增加 `schedule`。
+
 ## 功能特性
 
 - ✅ 多平台（兼容 NewAPI 与 OneAPI）
 - ✅ 单个/多账号自动签到
 - ✅ 多种机器人通知（可选）
 - ✅ 绕过 WAF 限制
+- ✅ GitHub OAuth + TOTP 签到模式
 
 ## 使用方法
 
@@ -85,6 +102,43 @@
 - `api_user`：session cookies 登录时用于请求头的 new-api-user 参数；邮箱密码登录可省略
 - `provider` (可选)：指定使用的服务商，默认为 `anyrouter`
 - `name` (可选)：自定义账号显示名称，用于通知和日志中标识账号
+
+### GitHub OAuth/TOTP 模式（可选）
+
+如果账号已经绑定 AnyRouter 的 GitHub 登录，也可以使用 `checkin_github_oauth.py` 与 `AnyRouter GitHub OAuth 自动签到` workflow。该模式通过浏览器完成 GitHub OAuth，然后在浏览器上下文中调用 AnyRouter 签到接口，适合被 WAF 拦截的环境。
+
+该实现参考了 [liukaizheng/anyrouter-check-in](https://github.com/liukaizheng/anyrouter-check-in) 的 GitHub OAuth 浏览器流程，并针对本仓库的 Python/Playwright 与 GitHub Actions 运行方式做了适配。
+
+在仓库 `Settings -> Environments -> production -> Environment secrets` 中添加：
+
+- `ANYROUTER_GITHUB_ACCOUNTS`：GitHub OAuth 账号配置（JSON 数组）
+- `ANYROUTER_GITHUB_DEVICE_CODES`：可选，仅当 GitHub 临时要求邮箱设备验证码时使用
+
+`ANYROUTER_GITHUB_ACCOUNTS` 示例：
+
+```json
+[
+  {
+    "name": "github-main",
+    "github_username": "your_github_email@example.com",
+    "github_password": "your_github_password",
+    "totp_secret": "BASE32TOTPSECRET"
+  }
+]
+```
+
+`ANYROUTER_GITHUB_DEVICE_CODES` 示例：
+
+```json
+{
+  "github-main": "123456",
+  "your_github_email@example.com": "123456"
+}
+```
+
+通常启用 GitHub TOTP 后无需 `ANYROUTER_GITHUB_DEVICE_CODES`。如果 GitHub 因新设备或新 IP 额外要求邮箱验证码，可以手动触发 workflow，临时配置该 secret 让脚本保存 GitHub 登录态。
+
+该 workflow 默认只手动运行，不会改变原有 `AnyRouter 自动签到` workflow 的定时行为；需要 GitHub OAuth 定时任务时，可在 `.github/workflows/github-oauth-checkin.yml` 中按需增加 `schedule`。
 
 **默认值说明**：
 

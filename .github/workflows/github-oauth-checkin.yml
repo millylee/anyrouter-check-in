@@ -1,0 +1,146 @@
+name: AnyRouter GitHub OAuth 自动签到
+
+on:
+  workflow_dispatch:
+    inputs:
+      account_only:
+        description: 只运行指定账号 name 或 GitHub 邮箱，多个用英文逗号分隔
+        required: false
+        default: ''
+        type: string
+      no_delay:
+        description: 跳过随机延迟
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  github-oauth-checkin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: production
+    env:
+      PYTHONIOENCODING: utf-8
+      PYTHONUNBUFFERED: 1
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        with:
+          version: latest
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: 缓存 UV 依赖
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+
+      - name: 安装依赖
+        run: uv sync --frozen
+
+      - name: 安装 Playwright Chromium
+        run: uv run python -m playwright install --with-deps chromium
+
+      - name: 恢复 GitHub OAuth 登录态
+        uses: actions/cache/restore@v4
+        with:
+          path: storage-states
+          key: anyrouter-github-oauth-storage-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            anyrouter-github-oauth-storage-${{ runner.os }}-
+
+      - name: 执行 GitHub OAuth 签到
+        id: run-checkin
+        env:
+          ANYROUTER_GITHUB_ACCOUNTS: ${{ secrets.ANYROUTER_GITHUB_ACCOUNTS }}
+          ANYROUTER_GITHUB_DEVICE_CODES: ${{ secrets.ANYROUTER_GITHUB_DEVICE_CODES }}
+          CHECKIN_HEADLESS: true
+          ACCOUNT_ONLY: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.account_only || '' }}
+          NO_DELAY: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.no_delay == 'true' && 'true' || 'false' }}
+        run: |
+          set -o pipefail
+          args=()
+          if [ "$NO_DELAY" = "true" ]; then
+            args+=(--no-delay)
+          fi
+          uv run python -u checkin_github_oauth.py "${args[@]}" 2>&1 | tee github-oauth-checkin.log
+
+      - name: 失败通知
+        if: always() && steps.run-checkin.outcome != 'success'
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DINGDING_WEBHOOK: ${{ secrets.DINGDING_WEBHOOK }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          CUSTOM_SMTP_SERVER: ${{ secrets.CUSTOM_SMTP_SERVER }}
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          SERVERPUSHKEY: ${{ secrets.SERVERPUSHKEY }}
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+          FEISHU_RECEIVE_ID: ${{ secrets.FEISHU_RECEIVE_ID }}
+          FEISHU_RECEIVE_ID_TYPE: ${{ secrets.FEISHU_RECEIVE_ID_TYPE }}
+          WEIXIN_WEBHOOK: ${{ secrets.WEIXIN_WEBHOOK }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GOTIFY_URL: ${{ secrets.GOTIFY_URL }}
+          GOTIFY_TOKEN: ${{ secrets.GOTIFY_TOKEN }}
+          GOTIFY_PRIORITY: ${{ secrets.GOTIFY_PRIORITY }}
+          BARK_KEY: ${{ secrets.BARK_KEY }}
+          BARK_SERVER: ${{ secrets.BARK_SERVER }}
+        run: |
+          uv run python - <<'PY'
+          import os
+          from pathlib import Path
+
+          from utils.notify import notify
+
+          configured = [
+              'DINGDING_WEBHOOK',
+              'EMAIL_USER',
+              'PUSHPLUS_TOKEN',
+              'SERVERPUSHKEY',
+              'FEISHU_WEBHOOK',
+              'FEISHU_APP_ID',
+              'WEIXIN_WEBHOOK',
+              'TELEGRAM_BOT_TOKEN',
+              'GOTIFY_URL',
+              'BARK_KEY',
+          ]
+          if not any(os.getenv(name) for name in configured):
+              print('No notification secret configured; failure notification skipped.')
+              raise SystemExit(0)
+
+          log_path = Path('github-oauth-checkin.log')
+          log_tail = ''
+          if log_path.exists():
+              log_tail = '\n'.join(log_path.read_text(encoding='utf-8', errors='replace').splitlines()[-80:])
+
+          content = f'Run: {os.getenv("RUN_URL", "")}\n\n{log_tail}'
+          notify.push_message('AnyRouter GitHub OAuth 签到失败', content)
+          PY
+
+      - name: 保存 GitHub OAuth 登录态
+        if: always() && hashFiles('storage-states/*.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: storage-states
+          key: anyrouter-github-oauth-storage-${{ runner.os }}-${{ github.run_id }}
+
+      - name: 上传 OAuth 日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: github-oauth-checkin-${{ github.run_id }}
+          path: github-oauth-checkin.log
+          if-no-files-found: ignore
+          retention-days: 7
