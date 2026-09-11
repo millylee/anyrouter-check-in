@@ -167,23 +167,25 @@ uv run pytest tests/ --cov=. --cov-report=html
 import pytest
 from unittest.mock import patch
 
+
 def test_parse_cookies():
-    from checkin import parse_cookies
+	from checkin import parse_cookies
 
-    # 测试字典格式
-    cookies = {"session": "abc123"}
-    result = parse_cookies(cookies)
-    assert result == {"session": "abc123"}
+	# 测试字典格式
+	cookies = {'session': 'abc123'}
+	result = parse_cookies(cookies)
+	assert result == {'session': 'abc123'}
 
-    # 测试字符串格式
-    cookies_str = "session=abc123; user=test"
-    result = parse_cookies(cookies_str)
-    assert result == {"session": "abc123", "user": "test"}
+	# 测试字符串格式
+	cookies_str = 'session=abc123; user=test'
+	result = parse_cookies(cookies_str)
+	assert result == {'session': 'abc123', 'user': 'test'}
+
 
 @pytest.mark.asyncio
 async def test_check_in_account():
-    # 异步测试示例
-    pass
+	# 异步测试示例
+	pass
 ```
 
 ## 🚀 提交 Pull Request
