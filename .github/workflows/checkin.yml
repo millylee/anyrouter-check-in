@@ -83,10 +83,12 @@ jobs:
     - name: 配置代理
       env:
         PROXY_SUBSCRIPTION_URL: ${{ secrets.PROXY_SUBSCRIPTION_URL }}
+        PROXY_SHARE_LINKS: ${{ secrets.PROXY_SHARE_LINKS }}
         PROXY_TEST_URL: https://www.google.com/generate_204
         MIHOMO_VERSION: v1.19.27
+        SINGBOX_VERSION: v1.14.1
         PROXY_REQUIRED: false
-      run: bash scripts/setup_mihomo_proxy.sh
+      run: bash scripts/setup_proxy.sh
 
     - name: 执行签到
       env:
@@ -131,7 +133,7 @@ jobs:
 
     - name: 停止代理
       if: always()
-      run: bash scripts/stop_mihomo_proxy.sh
+      run: bash scripts/stop_proxy.sh
 
     - name: 执行结果
       if: always()
