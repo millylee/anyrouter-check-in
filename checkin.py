@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import sys
+import random
 from datetime import datetime
 
 if hasattr(sys.stdout, 'reconfigure'):
@@ -38,6 +39,8 @@ from utils.debug import debug_print, is_debug_enabled
 from utils.notify import notify
 from utils.proxy import get_playwright_proxy, get_proxy_server
 
+from utils.headers import get_browser_headers
+from utils.oauth_agentrouter import AgentRouterOAuthClient
 load_dotenv()
 
 BALANCE_HASH_FILE = 'balance_hash.txt'
@@ -146,8 +149,8 @@ async def login_with_credentials(
 	email: str,
 	password: str,
 ) -> BrowserLoginResult | None:
-	"""使用邮箱密码通过浏览器登录，返回 cookies 与拦截到的 api user id。"""
-	print(f'[PROCESSING] {account_name}: Logging in with email/password...')
+	"""使用邮箱/用户名密码通过浏览器登录，返回 cookies 与拦截到的 api user id。"""
+	print(f'[PROCESSING] {account_name}: Logging in with credentials...')
 
 	login_url = f'{provider_config.domain}{provider_config.login_path}'
 	settings = load_browser_login_settings(
@@ -213,6 +216,27 @@ async def login_with_credentials(
 			await context.close()
 			return None
 
+		# 在真实浏览器环境内主动触发一次签到，避免外部 httpx 被 ESA WAF 拦截 403
+		if provider_config.needs_manual_check_in():
+			try:
+				sign_res = await page.evaluate('''async () => {
+					try {
+						const r = await fetch('/api/user/sign_in', {
+							method: 'POST',
+							headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}
+						});
+						return await r.json();
+					} catch (e) {
+						return { success: false, error: String(e) };
+					}
+				}''')
+				if sign_res and (sign_res.get('ret') == 1 or sign_res.get('code') == 0 or sign_res.get('success')):
+					print(f'[SUCCESS] {account_name}: Browser-native check-in completed: {sign_res.get("message", "success")}')
+				elif sign_res and any(k in str(sign_res.get('message', '')).lower() for k in ['已经签到', '已签到', '重复签到', 'already']):
+					print(f'[INFO] {account_name}: Browser check-in: already checked in today')
+			except Exception as e:
+				debug_print(f'[DEBUG] Browser-native check-in evaluation notice: {e}')
+
 		cookies = await context.cookies()
 		all_cookies = {
 			cookie.get('name'): cookie.get('value') for cookie in cookies if cookie.get('name') and cookie.get('value')
@@ -224,7 +248,7 @@ async def login_with_credentials(
 			success_msg += f', api_user={api_user}'
 		print(success_msg)
 		await context.close()
-		return BrowserLoginResult(cookies=all_cookies, api_user=api_user)
+		return BrowserLoginResult(cookies=all_cookies, api_user=api_user, user_profile=user_profile)
 
 	except Exception as e:
 		print(f'[FAILED] {account_name}: Error during login: {e}')
@@ -362,27 +386,48 @@ async def check_in_account(account: AccountConfig, account_index: int, app_confi
 
 	print(f'[INFO] {account_name}: Using provider "{account.provider}" ({provider_config.domain})')
 
-	# 邮箱密码优先
+	# 凭据登录优先（支持 email 或 username）
 	all_cookies = None
 	resolved_api_user: str | None = None
 	auth_method = None
 	if account.has_login_credentials():
-		print(f'[INFO] {account_name}: Attempting email/password login (priority)...')
-		assert account.email is not None and account.password is not None
+		login_id = account.username or account.email
+		print(f'[INFO] {account_name}: Attempting credential login ({login_id}) (priority)...')
+		assert login_id is not None and account.password is not None
 		login_result = await login_with_credentials(
 			account_name,
 			provider_config,
 			account.provider,
-			account.email,
+			login_id,
 			account.password,
 		)
 		if login_result:
 			all_cookies = login_result.cookies
 			resolved_api_user = login_result.api_user
-			auth_method = 'email/password'
+			auth_method = 'credentials'
+			if account.provider == 'agentrouter':
+				profile = login_result.user_profile or {}
+				quota = round(profile.get('quota', 0) / 500000, 2)
+				used_quota = round(profile.get('used_quota', 0) / 500000, 2)
+				user_info = {
+					'success': True,
+					'quota': quota,
+					'used_quota': used_quota,
+					'display': f':money: Current balance: ${quota}, Used: ${used_quota}',
+				}
+				print(user_info['display'])
+				print(f'[SUCCESS] {account_name}: AgentRouter credential login & check-in completed!')
+				return True, user_info, user_info
 		else:
-			print(f'[FAILED] {account_name}: Email/password login failed, will not use stale session cookies')
+			print(f'[FAILED] {account_name}: Credential login failed, will not use stale session cookies')
 			return False, None, None
+	elif account.provider == 'agentrouter' and account.has_oauth_session():
+		print(f'[INFO] {account_name}: Attempting OAuth silent re-login for AgentRouter...')
+		user_cookies = parse_cookies(account.cookies)
+		all_cookies = await prepare_cookies(account_name, provider_config, user_cookies)
+		if not all_cookies:
+			return False, None, None
+		return await run_agentrouter_oauth_checkin(all_cookies, account, account_name, provider_config)
 	else:
 		user_cookies = parse_cookies(account.cookies)
 		if not user_cookies:
@@ -405,6 +450,90 @@ async def check_in_account(account: AccountConfig, account_index: int, app_confi
 		use_proxy=provider_config.use_proxy,
 	)
 
+
+async def run_agentrouter_oauth_checkin(
+	all_cookies: dict,
+	account: AccountConfig,
+	account_name: str,
+	provider_config,
+) -> tuple[bool, dict | None, dict | None]:
+	"""通过 AgentRouter 的 OAuth 静默授权重登录流程完成真实签到。"""
+	try:
+		proxy_url = get_proxy_server(use_proxy=provider_config.use_proxy)
+		oauth_client = AgentRouterOAuthClient(domain=provider_config.domain)
+
+		client_kwargs: dict = {'http2': True, 'timeout': 30.0}
+		if proxy_url:
+			client_kwargs['proxy'] = proxy_url
+			if is_debug_enabled():
+				print(f'[INFO] {account_name}: HTTP client proxy enabled: {proxy_url}')
+			else:
+				print(f'[INFO] {account_name}: HTTP client proxy enabled')
+		elif provider_config.use_proxy:
+			print(f'[WARN] {account_name}: Provider requires proxy but CHECKIN_PROXY_URL is not set')
+
+		with httpx.Client(**client_kwargs) as client:
+			if all_cookies:
+				client.cookies.update(all_cookies)
+			headers = get_browser_headers(domain=provider_config.domain)
+			if account.api_user:
+				headers[provider_config.api_user_key] = account.api_user
+
+			user_info_url = f'{provider_config.domain}{provider_config.user_info_path}'
+			user_info_before = get_user_info(client, headers, user_info_url)
+			if user_info_before and user_info_before.get('success'):
+				print(user_info_before['display'])
+
+			# 1. 获取签名 state
+			state = oauth_client.fetch_oauth_state(client)
+
+			# 2. 授权换 code
+			if account.github_session:
+				oauth_provider = 'github'
+				code = oauth_client.authorize_github(
+					account.github_session,
+					state,
+					proxy_url=proxy_url,
+				)
+			elif account.linuxdo_session:
+				oauth_provider = 'linuxdo'
+				code = oauth_client.authorize_linuxdo(
+					account.linuxdo_session,
+					state,
+					proxy_url=proxy_url,
+				)
+			else:
+				print(f'[FAILED] {account_name}: Missing OAuth session token')
+				return False, user_info_before, user_info_before
+
+			# 3. 回调登录发奖
+			success, user_data, checked_in, msg = oauth_client.callback_login(
+				client,
+				provider=oauth_provider,
+				code=code,
+				state=state,
+			)
+
+			if not success:
+				print(f'[FAILED] {account_name}: OAuth login callback failed - {msg}')
+				return False, user_info_before, user_info_before
+
+			uid = str(user_data.get('id') or '')
+			if uid:
+				headers[provider_config.api_user_key] = uid
+
+			user_info_after = get_user_info(client, headers, user_info_url)
+
+			if checked_in:
+				print(f'[SUCCESS] {account_name}: OAuth check-in successful! Reward added to balance.')
+			else:
+				print(f'[INFO] {account_name}: OAuth login succeeded, already checked in today.')
+
+			return True, user_info_before, user_info_after
+
+	except Exception as e:
+		print(f'[FAILED] {account_name}: OAuth check-in error: {e}')
+		return False, None, None
 
 def run_check_in_requests(
 	all_cookies: dict,
@@ -431,23 +560,10 @@ def run_check_in_requests(
 		with httpx.Client(**client_kwargs) as client:
 			client.cookies.update(all_cookies)
 
-			headers = {
-				'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
-				'Accept': 'application/json, text/plain, */*',
-				'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-				'Accept-Encoding': 'gzip, deflate, br, zstd',
-				'Referer': provider_config.domain,
-				'Origin': provider_config.domain,
-				'Connection': 'keep-alive',
-				'Sec-Fetch-Dest': 'empty',
-				'Sec-Fetch-Mode': 'cors',
-				'Sec-Fetch-Site': 'same-origin',
-			}
-
+			headers = get_browser_headers(domain=provider_config.domain)
 			api_user = api_user_override or account.api_user
 			if api_user:
 				headers[provider_config.api_user_key] = api_user
-
 			user_info_url = f'{provider_config.domain}{provider_config.user_info_path}'
 			user_info_before = get_user_info(client, headers, user_info_url)
 			if user_info_before and user_info_before.get('success'):
@@ -458,7 +574,19 @@ def run_check_in_requests(
 			if provider_config.needs_manual_check_in():
 				success = execute_check_in(client, account_name, provider_config, headers)
 				user_info_after = get_user_info(client, headers, user_info_url)
+				if not success and user_info_before and user_info_after and user_info_before.get('success') and user_info_after.get('success'):
+					before_q = user_info_before.get('quota', 0)
+					after_q = user_info_after.get('quota', 0)
+					if after_q > before_q:
+						print(f'[SUCCESS] {account_name}: Check-in reward confirmed by balance increase (+${after_q - before_q:.2f})')
+						success = True
 				return success, user_info_before, user_info_after
+
+			if provider_config.name == 'agentrouter':
+				print(f'[WARN] {account_name}: AgentRouter 签到奖励在登录鉴权时由服务端发放（官方 FAQ：需要退出后重新登录才会到账）。')
+				print(f'[WARN] {account_name}: 当前仅提供了静态 Session Cookie，未触发登录事件，额度不会增长。')
+				print(f'[HINT] {account_name}: 请在账号配置中添加 "github_session" 或 "linuxdo_session" 以自动签到。')
+				return False, user_info_before, user_info_before
 
 			user_info_after = get_user_info(client, headers, user_info_url)
 			if user_info_after and user_info_after.get('success'):
@@ -515,6 +643,10 @@ async def main():
 
 	for i, account in enumerate(accounts):
 		account_key = f'account_{i + 1}'
+		if i > 0:
+			jitter_secs = random.randint(5, 18)
+			print(f'[INFO] Account jitter: waiting {jitter_secs}s before next account...')
+			await asyncio.sleep(jitter_secs)
 		try:
 			success, user_info_before, user_info_after = await check_in_account(account, i, app_config)
 			if success:
@@ -635,7 +767,7 @@ async def main():
 	else:
 		print('[INFO] All accounts successful and no balance changes detected, notification skipped')
 
-	sys.exit(0 if success_count > 0 else 1)
+	sys.exit(0 if success_count == total_count else 1)
 
 
 def run_main():
