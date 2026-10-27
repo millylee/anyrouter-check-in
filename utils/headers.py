@@ -5,13 +5,10 @@ from __future__ import annotations
 from typing import Mapping
 
 DEFAULT_USER_AGENT = (
-	'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-	'(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+	'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
 )
 
-DEFAULT_SEC_CH_UA = (
-	'"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"'
-)
+DEFAULT_SEC_CH_UA = '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"'
 
 
 def get_browser_headers(

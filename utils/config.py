@@ -229,16 +229,21 @@ def load_accounts_config() -> list[AccountConfig] | None:
 				print(f'ERROR: Account {i + 1} configuration format is incorrect')
 				return None
 
-			has_login = bool((account_dict.get('email') or account_dict.get('username')) and account_dict.get('password'))
+			has_login = bool(
+				(account_dict.get('email') or account_dict.get('username')) and account_dict.get('password')
+			)
 			has_oauth = bool(
 				account_dict.get('github_session')
 				or account_dict.get('linuxdo_session')
-				or (isinstance(account_dict.get('cookies'), dict) and (
-					account_dict['cookies'].get('user_session')
-					or account_dict['cookies'].get('github_session')
-					or account_dict['cookies'].get('_forum_session')
-					or account_dict['cookies'].get('linuxdo_session')
-				))
+				or (
+					isinstance(account_dict.get('cookies'), dict)
+					and (
+						account_dict['cookies'].get('user_session')
+						or account_dict['cookies'].get('github_session')
+						or account_dict['cookies'].get('_forum_session')
+						or account_dict['cookies'].get('linuxdo_session')
+					)
+				)
 			)
 
 			if 'api_user' not in account_dict:

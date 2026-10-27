@@ -7,8 +7,8 @@ import asyncio
 import hashlib
 import json
 import os
-import sys
 import random
+import sys
 from datetime import datetime
 
 if hasattr(sys.stdout, 'reconfigure'):
@@ -19,6 +19,7 @@ if hasattr(sys.stderr, 'reconfigure'):
 import httpx
 from cloakbrowser import launch_async
 from dotenv import load_dotenv
+from utils.oauth_agentrouter import AgentRouterOAuthClient
 
 from utils.browser import (
 	BrowserLoginResult,
@@ -36,11 +37,10 @@ from utils.browser import (
 )
 from utils.config import AccountConfig, AppConfig, load_accounts_config
 from utils.debug import debug_print, is_debug_enabled
+from utils.headers import get_browser_headers
 from utils.notify import notify
 from utils.proxy import get_playwright_proxy, get_proxy_server
 
-from utils.headers import get_browser_headers
-from utils.oauth_agentrouter import AgentRouterOAuthClient
 load_dotenv()
 
 BALANCE_HASH_FILE = 'balance_hash.txt'
@@ -219,7 +219,7 @@ async def login_with_credentials(
 		# 在真实浏览器环境内主动触发一次签到，避免外部 httpx 被 ESA WAF 拦截 403
 		if provider_config.needs_manual_check_in():
 			try:
-				sign_res = await page.evaluate('''async () => {
+				sign_res = await page.evaluate("""async () => {
 					try {
 						const r = await fetch('/api/user/sign_in', {
 							method: 'POST',
@@ -229,10 +229,14 @@ async def login_with_credentials(
 					} catch (e) {
 						return { success: false, error: String(e) };
 					}
-				}''')
+				}""")
 				if sign_res and (sign_res.get('ret') == 1 or sign_res.get('code') == 0 or sign_res.get('success')):
-					print(f'[SUCCESS] {account_name}: Browser-native check-in completed: {sign_res.get("message", "success")}')
-				elif sign_res and any(k in str(sign_res.get('message', '')).lower() for k in ['已经签到', '已签到', '重复签到', 'already']):
+					print(
+						f'[SUCCESS] {account_name}: Browser-native check-in completed: {sign_res.get("message", "success")}'
+					)
+				elif sign_res and any(
+					k in str(sign_res.get('message', '')).lower() for k in ['已经签到', '已签到', '重复签到', 'already']
+				):
 					print(f'[INFO] {account_name}: Browser check-in: already checked in today')
 			except Exception as e:
 				debug_print(f'[DEBUG] Browser-native check-in evaluation notice: {e}')
@@ -535,6 +539,7 @@ async def run_agentrouter_oauth_checkin(
 		print(f'[FAILED] {account_name}: OAuth check-in error: {e}')
 		return False, None, None
 
+
 def run_check_in_requests(
 	all_cookies: dict,
 	account: AccountConfig,
@@ -574,16 +579,26 @@ def run_check_in_requests(
 			if provider_config.needs_manual_check_in():
 				success = execute_check_in(client, account_name, provider_config, headers)
 				user_info_after = get_user_info(client, headers, user_info_url)
-				if not success and user_info_before and user_info_after and user_info_before.get('success') and user_info_after.get('success'):
+				if (
+					not success
+					and user_info_before
+					and user_info_after
+					and user_info_before.get('success')
+					and user_info_after.get('success')
+				):
 					before_q = user_info_before.get('quota', 0)
 					after_q = user_info_after.get('quota', 0)
 					if after_q > before_q:
-						print(f'[SUCCESS] {account_name}: Check-in reward confirmed by balance increase (+${after_q - before_q:.2f})')
+						print(
+							f'[SUCCESS] {account_name}: Check-in reward confirmed by balance increase (+${after_q - before_q:.2f})'
+						)
 						success = True
 				return success, user_info_before, user_info_after
 
 			if provider_config.name == 'agentrouter':
-				print(f'[WARN] {account_name}: AgentRouter 签到奖励在登录鉴权时由服务端发放（官方 FAQ：需要退出后重新登录才会到账）。')
+				print(
+					f'[WARN] {account_name}: AgentRouter 签到奖励在登录鉴权时由服务端发放（官方 FAQ：需要退出后重新登录才会到账）。'
+				)
 				print(f'[WARN] {account_name}: 当前仅提供了静态 Session Cookie，未触发登录事件，额度不会增长。')
 				print(f'[HINT] {account_name}: 请在账号配置中添加 "github_session" 或 "linuxdo_session" 以自动签到。')
 				return False, user_info_before, user_info_before
