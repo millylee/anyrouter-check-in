@@ -1,12 +1,26 @@
 #!/usr/bin/env bash
 # 通过 mihomo 拉取订阅、启动本地代理并探测可用节点。
 # 环境变量:
+#   CHECKIN_PROXY_URL       已配置的直接代理地址（优先使用）
 #   PROXY_SUBSCRIPTION_URL  订阅链接（必填才启用）
 #   PROXY_TEST_URL          探测目标，默认 https://www.google.com/generate_204
 #   PROXY_REQUIRED          true 时探测失败则退出 1
 #   PROXY_PORT              本地 mixed-port，默认 7890
 
 set -euo pipefail
+
+if [[ -n "${CHECKIN_PROXY_URL:-}" ]]; then
+	PROXY_TEST_URL="${DIRECT_PROXY_TEST_URL:-https://agentrouter.org}"
+	if curl -fsS -x "${CHECKIN_PROXY_URL}" --max-time 20 "${PROXY_TEST_URL}" -o /dev/null; then
+		echo "[SUCCESS] Direct proxy is ready"
+		if [[ -n "${GITHUB_ENV:-}" ]]; then
+			echo "CHECKIN_PROXY_URL=${CHECKIN_PROXY_URL}" >> "${GITHUB_ENV}"
+		fi
+		exit 0
+	fi
+	echo "[FAILED] Direct proxy health check failed for ${PROXY_TEST_URL}"
+	exit 1
+fi
 
 if [[ -z "${PROXY_SUBSCRIPTION_URL:-}" ]]; then
 	echo "[INFO] PROXY_SUBSCRIPTION_URL not set, skip proxy setup"
@@ -56,7 +70,16 @@ proxy-providers:
       url: https://www.gstatic.com/generate_204
 
 proxy-groups:
-  - name: CHECKIN
+  - name: CHECKIN-SG
+    type: url-test
+    url: "${PROXY_TEST_URL}"
+    interval: 300
+    tolerance: 150
+    lazy: false
+    filter: "(?i)新加坡|SG|Singapore"
+    use:
+      - subscription
+  - name: CHECKIN-ALL
     type: url-test
     url: "${PROXY_TEST_URL}"
     interval: 300
@@ -64,6 +87,14 @@ proxy-groups:
     lazy: false
     use:
       - subscription
+  - name: CHECKIN
+    type: fallback
+    url: "${PROXY_TEST_URL}"
+    interval: 300
+    lazy: false
+    proxies:
+      - CHECKIN-SG
+      - CHECKIN-ALL
 
 rules:
   - MATCH,CHECKIN

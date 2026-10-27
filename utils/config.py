@@ -96,7 +96,7 @@ class AppConfig:
 			),
 			'agentrouter': ProviderConfig(
 				name='agentrouter',
-				domain='https://agentrouter.org',
+				domain='https://ps.air-outer.com',
 				login_path='/login',
 				sign_in_path=None,  # 无需签到接口，查询用户信息时自动完成签到
 				user_info_path='/api/user/self',
@@ -154,7 +154,10 @@ class AccountConfig:
 	provider: str = 'anyrouter'
 	name: str | None = None
 	email: str | None = None
+	username: str | None = None
 	password: str | None = None
+	github_session: str | None = None
+	linuxdo_session: str | None = None
 
 	@classmethod
 	def from_dict(cls, data: dict, index: int) -> 'AccountConfig':
@@ -162,18 +165,39 @@ class AccountConfig:
 		provider = data.get('provider', 'anyrouter')
 		name = data.get('name', f'Account {index + 1}')
 
+		cookies_val = data.get('cookies')
+		github_session = data.get('github_session')
+		linuxdo_session = data.get('linuxdo_session')
+
+		# 兼容直接把 user_session / _forum_session 写在 cookies 字典里的场景
+		if not github_session and isinstance(cookies_val, dict):
+			github_session = cookies_val.get('user_session') or cookies_val.get('github_session')
+		if not linuxdo_session and isinstance(cookies_val, dict):
+			linuxdo_session = cookies_val.get('_forum_session') or cookies_val.get('linuxdo_session')
+
+		username_val = data.get('username') or data.get('email')
+		email_val = data.get('email') or data.get('username')
+
 		return cls(
-			cookies=data.get('cookies'),
+			cookies=cookies_val,
 			api_user=data.get('api_user'),
 			provider=provider,
 			name=name if name else None,
-			email=data.get('email'),
+			email=email_val,
+			username=username_val,
 			password=data.get('password'),
+			github_session=github_session,
+			linuxdo_session=linuxdo_session,
 		)
 
+	def has_oauth_session(self) -> bool:
+		"""是否配置了第三方 OAuth 会话"""
+		return bool(self.github_session or self.linuxdo_session)
+
 	def has_login_credentials(self) -> bool:
-		"""是否配置了邮箱密码登录"""
-		return bool(self.email and self.password)
+		"""是否配置了邮箱或用户名密码登录"""
+		login_id = self.username or self.email
+		return bool(login_id and self.password)
 
 	def get_display_name(self, index: int) -> str:
 		"""获取显示名称"""
@@ -205,19 +229,34 @@ def load_accounts_config() -> list[AccountConfig] | None:
 				print(f'ERROR: Account {i + 1} configuration format is incorrect')
 				return None
 
+			has_login = bool(
+				(account_dict.get('email') or account_dict.get('username')) and account_dict.get('password')
+			)
+			has_oauth = bool(
+				account_dict.get('github_session')
+				or account_dict.get('linuxdo_session')
+				or (
+					isinstance(account_dict.get('cookies'), dict)
+					and (
+						account_dict['cookies'].get('user_session')
+						or account_dict['cookies'].get('github_session')
+						or account_dict['cookies'].get('_forum_session')
+						or account_dict['cookies'].get('linuxdo_session')
+					)
+				)
+			)
+
 			if 'api_user' not in account_dict:
-				has_login = account_dict.get('email') and account_dict.get('password')
-				if not has_login:
+				if not has_login and not has_oauth:
 					print(
-						f'ERROR: Account {i + 1} missing required field (api_user) - only email+password login can omit it'
+						f'ERROR: Account {i + 1} missing required field (api_user) - only email+password or OAuth login can omit it'
 					)
 					return None
 
-			has_cookies = 'cookies' in account_dict and account_dict['cookies']
-			has_login = account_dict.get('email') and account_dict.get('password')
+			has_cookies = bool('cookies' in account_dict and account_dict['cookies'])
 
-			if not has_cookies and not has_login:
-				print(f'ERROR: Account {i + 1} must have either cookies or email+password')
+			if not has_cookies and not has_login and not has_oauth:
+				print(f'ERROR: Account {i + 1} must have either cookies, email+password, or oauth session')
 				return None
 
 			if 'name' in account_dict and not account_dict['name']:

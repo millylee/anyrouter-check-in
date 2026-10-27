@@ -4,6 +4,17 @@ from types import SimpleNamespace
 import pytest
 
 from utils.browser import launch_login_context, load_browser_login_settings
+from utils.proxy import get_playwright_proxy
+
+
+def test_playwright_proxy_extracts_credentials(monkeypatch):
+	monkeypatch.setenv('CHECKIN_PROXY_URL', 'http://user:pass@proxy.example:30060')
+
+	assert get_playwright_proxy() == {
+		'server': 'http://proxy.example:30060',
+		'username': 'user',
+		'password': 'pass',
+	}
 
 
 def test_browser_login_settings_records_profile_persistence(monkeypatch, tmp_path):
