@@ -276,10 +276,39 @@
 
 在仓库 Settings -> Environments -> production -> Environment secrets 中添加下面**任意一个**：
 
+- `SOFTETHER_VPN_CONFIG`：SoftEther 软件导出的 `.vpn` 文件**完整原文**，保留换行。自动导入连接，建立 VPN，并提供本地 HTTP 代理入口。
 - `PROXY_SUBSCRIPTION_URL`：Clash/Mihomo 订阅链接。设置后 workflow 会启动 mihomo 拉取订阅。
 - `PROXY_SHARE_LINKS`：直接填写节点分享链接，**一行一个**，可以填多个。设置后 workflow 会启动 sing-box，把所有节点放进一个自动测速分组（`urltest`），由 sing-box 自己选出可用节点。
 
-> 两个都设置时，**只使用 `PROXY_SUBSCRIPTION_URL`，`PROXY_SHARE_LINKS` 会被忽略**。
+优先级从高到低为 **`SOFTETHER_VPN_CONFIG` → `PROXY_SUBSCRIPTION_URL` → `PROXY_SHARE_LINKS` → 已有 `CHECKIN_PROXY_URL` → 直连**。选择第一个非空配置，每次只启动一个后端；选中的后端失败后不会逐级尝试其他方式。清空高优先级 Secret 后，下次运行才会选择后面的方式。
+
+### SoftEther VPN：粘贴 `.vpn` 即可接入
+
+1. 在 SoftEther VPN Client Manager 中导出需要的连接；如果询问是否删除用户名和密码，选择**保留认证信息**。
+2. 用文本编辑器打开 `.vpn`，复制文件全部内容到 `production` 环境的 Secret **`SOFTETHER_VPN_CONFIG`**。不要额外加引号、代码块，也不要转换成 JSON/Base64。
+3. 手动运行 Actions。脚本自动下载并校验固定版本 SoftEther `v4.44-9807-rtm`，导入连接、适配 Linux 虚拟网卡、获取 DHCP/DNS，最后检测代理请求是否成功。
+
+只新增这一个必填 Secret。支持 Windows 导出的 UTF-8 BOM 和 CRLF；服务器、Hub、认证材料和证书校验设置交给 SoftEther 原生导入。GitHub 单个 Secret 上限为 48 KB。导出时移除密码、使用智能卡/交互认证，或依赖导出文件以外的本机证书材料，都不能仅靠这一个 Secret 自动连接。
+
+第一版支持 **Linux x86_64（当前 Ubuntu Actions runner）**，需要 root 或免密 sudo、`/dev/net/tun`，并通过 apt 安装缺失的编译及网络工具。VPN 服务端需要提供 **IPv4 DHCP（地址、掩码、网关、DNS）和可用的目标网络出口**；仅有 Windows 网卡静态 IP 配置的连接不适用。`.vpn` 中指定的上游代理也必须能从 runner 访问。
+
+SoftEther 客户端使用宿主网络建立隧道；HTTP 代理和 DHCP 在独立网络命名空间中运行，其唯一网络出口通过虚拟网卡通往 VPN。DNS 使用 VPN 的 DHCP 配置，该空间关闭 IPv6。宿主机的默认路由、DNS 和防火墙不作修改。VPN 断开后，已发布的代理入口请求会失败，不会绕过 VPN 直连。
+
+沿用 `PROXY_PORT`（默认 `7890`）、`PROXY_TEST_URL` 和 `PROXY_REQUIRED`。SoftEther 准备失败时，`PROXY_REQUIRED=true` 使任务失败；默认 `false` 会清理后继续签到，并清空后续 Actions 步骤的代理地址。不会自动尝试较低优先级配置。日志不输出 `.vpn` 内容或原生客户端的敏感诊断；导入后删除临时 `.vpn`，客户端运行配置保存在仅 root 可访问的目录中。异常退出会清理运行目录，任务结束时 `stop_proxy.sh` 关闭全部进程并删除本次创建的网络资源。
+
+本地 Linux 使用时，先将变量导出到 shell（只写进 `.env` 不会自动启动 VPN），再执行：
+
+```bash
+export SOFTETHER_VPN_CONFIG="$(cat /path/to/connection.vpn)"
+if PROXY_REQUIRED=true bash scripts/setup_proxy.sh; then
+  CHECKIN_PROXY_URL=http://127.0.0.1:7890 uv run checkin.py
+fi
+bash scripts/stop_proxy.sh
+```
+
+示例仅在准备成功后启动签到。支持的是单个导出连接；运行环境已有 SoftEther 客户端占用管理端口 `9930` 时会拒绝启动，避免干扰现有连接。
+
+### 分享链接与已有代理
 
 `PROXY_SHARE_LINKS` 支持两类写法：
 
@@ -301,7 +330,7 @@ SOCKS / HTTP 这几类的用户名和密码都可以省略；`socks://` 等同 `
 
 > `https://` 会被当成「HTTPS 代理服务器」来解析，所以不要把订阅链接粘进 `PROXY_SHARE_LINKS` —— 订阅链接请填 `PROXY_SUBSCRIPTION_URL`。
 
-两种方式都由 `scripts/setup_proxy.sh` 统一分发，启动本地代理后写入 `CHECKIN_PROXY_URL`，签到脚本会自动读取。
+三种自动启动方式都由 `scripts/setup_proxy.sh` 统一分发，在 Actions 中启动成功后写入 `CHECKIN_PROXY_URL`，签到脚本会自动读取。仍按平台的 `use_proxy` 配置决定是否使用代理，默认 `agentrouter=true`、`anyrouter=false`。
 
 本地运行时也可以直接使用已有代理：
 

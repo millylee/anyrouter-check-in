@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 停止 setup_proxy.sh 启动的本地代理（mihomo / sing-box）。
+# 停止 setup_proxy.sh 启动的本地代理（SoftEther / mihomo / sing-box）。
 set -euo pipefail
 
 PROXY_DIR="${RUNNER_TEMP:-/tmp}/checkin-proxy"
@@ -12,3 +12,6 @@ for name in mihomo singbox; do
 		rm -f "${PID_FILE}"
 	fi
 done
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bash "${SCRIPT_DIR}/stop_softether_proxy.sh"
